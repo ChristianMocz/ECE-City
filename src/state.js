@@ -1,31 +1,45 @@
+// src/state.js
 import { Mode } from "./ui.js";
 
 export function createGameState() {
   return {
-    mode: Mode.WIRE,
-
-    // nodes: Map(id -> {id,type,container,hit,visual,data})
+    // graph
     nodes: new Map(),
-
-    // wires: Array({a,b,line,r})
     wires: [],
 
-    // wiring interaction
-    wireStart: null,     // node id or null
-    previewLine: null,   // Phaser.GameObjects.Line or null
+    // wiring tool
+    wireStart: null,
+    previewLine: null,
+    wireDepth: 10,
 
-    // “ECE-ish” model (simple, stable)
-    V: 10,
-    R_WIRE: 1.0,
-    R_RES: 8.0,
-    R_HOUSE: 6.0,
-    R_LED: 3.0,
+    // counters
+    counters: { H: 0, R: 0, T: 0, L: 0 },
 
-    I_ON: 1.0,
-    I_DIM: 0.6,
+    // sim outputs
+    nodeVoltages: new Map(),
+    powered: new Map(),
 
-    powered: new Map(), // id -> {I, level}
+    // tool mode
+    mode: Mode.WIRE,
 
-    counters: { H: 0, R: 0, T: 0, L: 0 }
+    // ---------- ELECTRICAL CONSTANTS ----------
+    V: 12,          // Generator voltage
+
+    // Make wire loss tiny so direct connections read ~12.00V
+    R_WIRE: 0.03,
+
+    R_HOUSE: 18,
+    R_LED: 30,
+
+    // placement default values
+    RES_DEFAULT_OHMS: 2.0,
+    placeResOhms: 2.0,
+
+    // Voltage thresholds
+    V_HOUSE_ON: 9.0,
+    V_HOUSE_DIM: 7.0,
+
+    V_LED_ON: 3.0,
+    V_LED_DIM: 2.2,
   };
 }

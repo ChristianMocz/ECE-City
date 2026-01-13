@@ -28,7 +28,9 @@ function create() {
   const scene = this;
   const state = createGameState();
 
-  // ✅ make input choose top-most object only
+  // UI now uses 2 rows, so ignore clicks in a taller top strip
+  const UI_HEIGHT = 110;
+
   scene.input.setTopOnly(true);
 
   drawBackground(scene);
@@ -72,12 +74,9 @@ function create() {
     state.previewLine = scene.add.line(0, 0, p.x, p.y, p.x, p.y, 0x2b2b2b)
       .setOrigin(0, 0)
       .setLineWidth(4)
-      .setDepth(10);
+      .setDepth(state.wireDepth);
 
-    // ✅ wires must never steal clicks
-    state.previewLine.disableInteractive?.();
-
-    status.setText(`Wiring from ${id}... click another node to connect. (Click empty ground to cancel)`);
+    status.setText(`Wiring from ${id}... click another node. (Click empty ground to cancel)`);
   }
 
   function finishWire(id) {
@@ -85,7 +84,6 @@ function create() {
 
     const a = state.wireStart;
     const b = id;
-
     if (a === b) return;
 
     if (wireExists(a, b)) {
@@ -99,10 +97,8 @@ function create() {
 
     state.previewLine.setTo(pa.x, pa.y, pb.x, pb.y);
 
-    // store permanent
     const permLine = state.previewLine;
-    permLine.setDepth(10);
-    permLine.disableInteractive?.(); // ✅ permanent wire also can’t steal clicks
+    permLine.setDepth(state.wireDepth);
 
     state.wires.push({ a, b, line: permLine, r: state.R_WIRE });
 
@@ -119,28 +115,32 @@ function create() {
       if (node.type === "HOUSE") {
         const r = state.powered.get(node.id);
         setHouseVisual(node.visual, r ? r.level : "OFF");
+        const Vn = r ? r.V : 0;
+        node.visual.voltLabel.setText(`V=${Vn.toFixed(2)}V`);
       }
+
       if (node.type === "LED") {
         const r = state.powered.get(node.id);
         setLEDVisual(node.visual, r ? r.level : "OFF");
+        const Vn = r ? r.V : 0;
+        node.visual.voltLabel.setText(`V=${Vn.toFixed(2)}V`);
       }
+
       if (node.type === "TRANS") {
-        setTransistorVisual(node.visual, node.data.on);
+        setTransistorVisual(node.visual, !!node.data.on);
       }
     }
   }
 
-  // ✅ key: stopPropagation so background click doesn’t cancel your wire
   function registerNodeClicks(node) {
     node.hit.setInteractive({ useHandCursor: true });
 
     node.hit.on("pointerdown", (pointer, localX, localY, event) => {
       event.stopPropagation();
 
-      // transistor toggle when NOT in WIRE mode
+      // Toggle transistor if not wiring
       if (node.type === "TRANS" && state.mode !== Mode.WIRE) {
         node.data.on = !node.data.on;
-        setTransistorVisual(node.visual, node.data.on);
         refreshPower();
         status.setText(`${node.id} is now ${node.data.on ? "ON" : "OFF"}.`);
         return;
@@ -153,7 +153,7 @@ function create() {
     });
   }
 
-  // ---- Place functions ----
+  // placement helpers
   function placeHouse(x, y) {
     const id = nextId("H");
     const obj = makeHouse(scene, x, y, id);
@@ -164,17 +164,18 @@ function create() {
 
   function placeRes(x, y) {
     const id = nextId("R");
-    const obj = makeResistor(scene, x, y, id);
-    const node = addNode({ id, type: "RES", ...obj, data: {} });
+    const ohms = state.placeResOhms;
+    const obj = makeResistor(scene, x, y, id, ohms);
+    const node = addNode({ id, type: "RES", ...obj, data: { ohms } });
     registerNodeClicks(node);
     refreshPower();
+    status.setText(`Placed ${id} = ${ohms.toFixed(2)}Ω`);
   }
 
   function placeTrans(x, y) {
     const id = nextId("T");
     const obj = makeTransistor(scene, x, y, id);
     const node = addNode({ id, type: "TRANS", ...obj, data: { on: true } });
-    setTransistorVisual(node.visual, true);
     registerNodeClicks(node);
     refreshPower();
   }
@@ -187,26 +188,26 @@ function create() {
     refreshPower();
   }
 
-  // ---- Initial generator ----
+  // generator
   const genObj = makeGenerator(scene, 140, 285);
   const genNode = addNode({ id: "GEN", type: "GEN", ...genObj, data: {} });
   registerNodeClicks(genNode);
 
-  // ---- Initial houses ----
-  placeHouse(700, 210); // H0
-  placeHouse(700, 310); // H1
-  placeHouse(700, 410); // H2
+  // starter houses (slightly more spaced)
+  placeHouse(700, 190);
+  placeHouse(700, 315);
+  placeHouse(700, 440);
 
-  // preview wire follows mouse
+  // wire preview follows mouse
   scene.input.on("pointermove", (p) => {
     if (!state.previewLine || !state.wireStart) return;
     const a = nodePos(state.wireStart);
     state.previewLine.setTo(a.x, a.y, p.x, p.y);
   });
 
-  // click empty ground cancels wire OR places components
+  // empty ground click
   scene.input.on("pointerdown", (p) => {
-    if (p.y < 80) return;
+    if (p.y < UI_HEIGHT) return;
 
     if (state.mode === Mode.WIRE) {
       if (state.previewLine) {
@@ -216,12 +217,12 @@ function create() {
       return;
     }
 
-    if (state.mode === Mode.PLACE_HOUSE) return void (placeHouse(p.x, p.y), status.setText("Placed HOUSE."));
-    if (state.mode === Mode.PLACE_RES) return void (placeRes(p.x, p.y), status.setText("Placed RESISTOR."));
-    if (state.mode === Mode.PLACE_TRANS) return void (placeTrans(p.x, p.y), status.setText("Placed TRANSISTOR."));
-    if (state.mode === Mode.PLACE_LED) return void (placeLED(p.x, p.y), status.setText("Placed LED."));
+    if (state.mode === Mode.PLACE_HOUSE) return void placeHouse(p.x, p.y);
+    if (state.mode === Mode.PLACE_RES) return void placeRes(p.x, p.y);
+    if (state.mode === Mode.PLACE_TRANS) return void placeTrans(p.x, p.y);
+    if (state.mode === Mode.PLACE_LED) return void placeLED(p.x, p.y);
   });
 
   refreshPower();
-  status.setText("WIRE: click GEN → R0 → H0, then click H0 → H1 (house-to-house works).");
+  status.setText("WIRE: connect GEN to houses. Voltage labels appear under each HOUSE/LED.");
 }

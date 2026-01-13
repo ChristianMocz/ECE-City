@@ -1,94 +1,202 @@
+// src/sim.js
+// KCL-based DC resistive network solver (node-voltage method)
+//
+// Fixes:
+// - Only solves the GEN-reachable conducting network (floating parts do nothing)
+// - Transistor OFF opens (edge removed)
+// - Resistors have per-part values: node.data.ohms
+// - ON/DIM/OFF is decided by VOLTAGE targets:
+//   House: ON at 9V, LED: ON at 3V
+
+function isTransistor(node) {
+  return node && node.type === "TRANS";
+}
+function transistorOn(node) {
+  return !!node?.data?.on;
+}
+
+function getLoadResistance(state, node) {
+  if (node.type === "HOUSE") return state.R_HOUSE;
+  if (node.type === "LED") return state.R_LED;
+  return null;
+}
+
+function edgeResistance(state, fromNode, toNode) {
+  let R = state.R_WIRE;
+
+  // Resistor behaves like a series element when you wire through it:
+  // GEN -> RES -> HOUSE
+  if (toNode.type === "RES") R += (toNode.data?.ohms ?? state.RES_DEFAULT_OHMS);
+  if (fromNode.type === "RES") R += (fromNode.data?.ohms ?? state.RES_DEFAULT_OHMS);
+
+  // Transistor ON behaves like a small extra resistance (closed switch)
+  if (toNode.type === "TRANS" && transistorOn(toNode)) R += 0.5;
+  if (fromNode.type === "TRANS" && transistorOn(fromNode)) R += 0.5;
+
+  return R;
+}
+
 function buildAdj(state) {
   const adj = new Map();
   for (const id of state.nodes.keys()) adj.set(id, []);
+
   for (const w of state.wires) {
-    if (!adj.has(w.a)) adj.set(w.a, []);
-    if (!adj.has(w.b)) adj.set(w.b, []);
-    adj.get(w.a).push({ to: w.b, r: w.r });
-    adj.get(w.b).push({ to: w.a, r: w.r });
+    const a = state.nodes.get(w.a);
+    const b = state.nodes.get(w.b);
+    if (!a || !b) continue;
+
+    // OPEN switch: remove edges entirely
+    if (isTransistor(a) && !transistorOn(a)) continue;
+    if (isTransistor(b) && !transistorOn(b)) continue;
+
+    const Rab = edgeResistance(state, a, b);
+    const Rba = edgeResistance(state, b, a);
+
+    adj.get(w.a).push({ to: w.b, R: Rab });
+    adj.get(w.b).push({ to: w.a, R: Rba });
   }
+
   return adj;
 }
 
-function extraR(state, node) {
-  if (node.type === "RES") return state.R_RES;
-  return 0;
+function reachableFromGEN(adj) {
+  const reachable = new Set();
+  if (!adj.has("GEN")) return reachable;
+
+  const stack = ["GEN"];
+  reachable.add("GEN");
+
+  while (stack.length) {
+    const u = stack.pop();
+    for (const e of (adj.get(u) || [])) {
+      const v = e.to;
+      if (!reachable.has(v)) {
+        reachable.add(v);
+        stack.push(v);
+      }
+    }
+  }
+  return reachable;
 }
 
-function isOffTrans(node) {
-  return node.type === "TRANS" && node.data && node.data.on === false;
+function solveLinear(A, b) {
+  const n = A.length;
+  const M = A.map((row, i) => row.slice().concat([b[i]]));
+
+  for (let col = 0; col < n; col++) {
+    let pivot = col;
+    for (let r = col + 1; r < n; r++) {
+      if (Math.abs(M[r][col]) > Math.abs(M[pivot][col])) pivot = r;
+    }
+    if (Math.abs(M[pivot][col]) < 1e-12) return new Array(n).fill(0);
+
+    if (pivot !== col) {
+      const tmp = M[col]; M[col] = M[pivot]; M[pivot] = tmp;
+    }
+
+    const div = M[col][col];
+    for (let c = col; c <= n; c++) M[col][c] /= div;
+
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const factor = M[r][col];
+      if (Math.abs(factor) < 1e-12) continue;
+      for (let c = col; c <= n; c++) M[r][c] -= factor * M[col][c];
+    }
+  }
+
+  return M.map(row => row[n]);
+}
+
+function levelByVoltage(state, nodeType, Vn) {
+  if (nodeType === "HOUSE") {
+    if (Vn >= state.V_HOUSE_ON) return "ON";
+    if (Vn >= state.V_HOUSE_DIM) return "DIM";
+    return "OFF";
+  }
+  if (nodeType === "LED") {
+    if (Vn >= state.V_LED_ON) return "ON";
+    if (Vn >= state.V_LED_DIM) return "DIM";
+    return "OFF";
+  }
+  return "OFF";
 }
 
 export function computePower(state) {
   const adj = buildAdj(state);
+  const reachable = reachableFromGEN(adj);
 
-  // Dijkstra where “distance” = resistance
-  const dist = new Map();
-  const visited = new Set();
-  for (const id of state.nodes.keys()) dist.set(id, Infinity);
-  dist.set("GEN", 0);
+  // default everything to 0V
+  const Vmap = new Map();
+  for (const id of state.nodes.keys()) Vmap.set(id, 0);
 
-  while (true) {
-    let u = null;
-    let best = Infinity;
-    for (const [id, d] of dist.entries()) {
-      if (!visited.has(id) && d < best) { best = d; u = id; }
-    }
-    if (u === null) break;
+  // GEN fixed
+  if (state.nodes.has("GEN")) Vmap.set("GEN", state.V);
 
-    visited.add(u);
-    const uNode = state.nodes.get(u);
-    if (!uNode) continue;
-
-    // transistor OFF blocks pass-through
-    if (u !== "GEN" && isOffTrans(uNode)) continue;
-
-    for (const e of (adj.get(u) || [])) {
-      const v = e.to;
-      const vNode = state.nodes.get(v);
-      if (!vNode) continue;
-
-      const cand = dist.get(u) + e.r + extraR(state, vNode);
-      if (cand < dist.get(v)) dist.set(v, cand);
-    }
+  // unknowns: GEN-reachable nodes except GEN
+  const unknownIds = [];
+  for (const id of state.nodes.keys()) {
+    if (id === "GEN") continue;
+    if (!reachable.has(id)) continue;
+    unknownIds.push(id);
   }
 
-  state.powered = new Map();
+  const N = unknownIds.length;
 
+  if (N > 0) {
+    const indexOf = new Map();
+    unknownIds.forEach((id, i) => indexOf.set(id, i));
+
+    const A = Array.from({ length: N }, () => new Array(N).fill(0));
+    const b = new Array(N).fill(0);
+
+    for (let i = 0; i < N; i++) {
+      const id = unknownIds[i];
+      const node = state.nodes.get(id);
+      if (!node) continue;
+
+      let sumG = 0;
+      const edges = adj.get(id) || [];
+
+      for (const e of edges) {
+        const G = 1 / e.R;
+        sumG += G;
+
+        if (e.to === "GEN") {
+          b[i] += G * state.V;
+        } else if (indexOf.has(e.to)) {
+          const j = indexOf.get(e.to);
+          A[i][j] -= G;
+        }
+      }
+
+      // load-to-ground
+      const Rload = getLoadResistance(state, node);
+      if (Rload != null) sumG += 1 / Rload;
+
+      A[i][i] += sumG;
+    }
+
+    const Vunknown = solveLinear(A, b);
+    for (let i = 0; i < N; i++) Vmap.set(unknownIds[i], Vunknown[i]);
+  }
+
+  state.nodeVoltages = Vmap;
+
+  // compute “powered” info for loads
+  state.powered = new Map();
   for (const node of state.nodes.values()) {
     if (node.type !== "HOUSE" && node.type !== "LED") continue;
 
-    const Rpath = dist.get(node.id);
-    if (!isFinite(Rpath)) {
-      state.powered.set(node.id, { I: 0, level: "OFF" });
+    if (!reachable.has(node.id)) {
+      state.powered.set(node.id, { V: 0, level: "OFF" });
       continue;
     }
 
-    const Rload = node.type === "HOUSE" ? state.R_HOUSE : state.R_LED;
-    const I = state.V / (Rpath + Rload);
-
-    let level = "OFF";
-    if (I >= state.I_ON) level = "ON";
-    else if (I >= state.I_DIM) level = "DIM";
-
-    state.powered.set(node.id, { I, level });
+    const Vn = Vmap.get(node.id) ?? 0;
+    const level = levelByVoltage(state, node.type, Vn);
+    state.powered.set(node.id, { V: Vn, level });
   }
 
   return state.powered;
-}
-
-export function summarizePower(state) {
-  const loads = [...state.nodes.values()].filter(n => n.type === "HOUSE" || n.type === "LED");
-  if (loads.length === 0) return "Place a HOUSE or LED first.";
-
-  let on = 0, dim = 0, off = 0;
-  for (const n of loads) {
-    const r = state.powered.get(n.id);
-    const lvl = r ? r.level : "OFF";
-    if (lvl === "ON") on++;
-    else if (lvl === "DIM") dim++;
-    else off++;
-  }
-
-  return `Power report: ON ${on}, DIM ${dim}, OFF ${off}. (Parallel paths help; long series chains add resistance.)`;
 }
