@@ -1,3 +1,4 @@
+// src/factory.js
 export function drawBackground(scene) {
   const W = scene.scale.width;
   const H = scene.scale.height;
@@ -28,12 +29,6 @@ export function addTree(scene, x, y) {
   scene.add.circle(x + 18, y + 8, 18, 0x2a7f2a).setDepth(-96);
 }
 
-/**
- * IMPORTANT CHANGE:
- * We return hit = container (not a child rectangle).
- * And we set container size so it always has a reliable clickable hit area.
- */
-
 export function makeGenerator(scene, x, y) {
   const container = scene.add.container(x, y).setDepth(20);
 
@@ -51,18 +46,15 @@ export function makeGenerator(scene, x, y) {
   roof.strokePath();
 
   const bolt = scene.add.triangle(0, 18, -8, -6, 2, -6, -4, 18, 0xffcc00);
-
   const label = scene.add.text(-28, 62, "GEN", { fontFamily: "Arial", fontSize: "14px", color: "#ffffff" });
 
   container.add([roof, base, bolt, label]);
-
-  // ✅ reliable hitbox
   container.setSize(180, 160);
 
   return { container, hit: container, visual: { base } };
 }
 
-export function makeHouse(scene, x, y, idText = "H") {
+export function makeHouse(scene, x, y, idText = "H0") {
   const container = scene.add.container(x, y).setDepth(20);
 
   const body = scene.add.rectangle(0, 20, 90, 60, 0xe9e2d0).setStrokeStyle(3, 0x3a2f25);
@@ -82,16 +74,15 @@ export function makeHouse(scene, x, y, idText = "H") {
   const window2 = scene.add.rectangle(18, 20, 16, 16, 0x777777).setStrokeStyle(2, 0x3a2f25);
 
   const idLabel = scene.add.text(-18, 55, idText, { fontFamily: "Arial", fontSize: "12px", color: "#0b1020" });
+  const voltLabel = scene.add.text(-28, 70, "V=0.00V", { fontFamily: "Arial", fontSize: "12px", color: "#0b1020" });
 
-  container.add([roof, body, window1, window2, idLabel]);
+  container.add([roof, body, window1, window2, idLabel, voltLabel]);
+  container.setSize(120, 140);
 
-  // ✅ reliable hitbox (smaller so stacked houses don't overlap as badly)
-  container.setSize(120, 120);
-
-  return { container, hit: container, visual: { body, window1, window2, idLabel } };
+  return { container, hit: container, visual: { body, window1, window2, voltLabel } };
 }
 
-export function makeResistor(scene, x, y, idText = "R") {
+export function makeResistor(scene, x, y, idText = "R0", ohms = 2.0) {
   const container = scene.add.container(x, y).setDepth(20);
 
   const base = scene.add.rectangle(0, 20, 90, 50, 0xf0d36b).setStrokeStyle(3, 0x6b5a1d);
@@ -109,15 +100,15 @@ export function makeResistor(scene, x, y, idText = "R") {
   g.strokePath();
 
   const label = scene.add.text(-18, 55, idText, { fontFamily: "Arial", fontSize: "14px", color: "#0b1020" });
+  const ohmLabel = scene.add.text(-34, 72, `${ohms.toFixed(2)}Ω`, { fontFamily: "Arial", fontSize: "12px", color: "#0b1020" });
 
-  container.add([base, g, label]);
+  container.add([base, g, label, ohmLabel]);
+  container.setSize(140, 140);
 
-  container.setSize(140, 120);
-
-  return { container, hit: container, visual: { base, label } };
+  return { container, hit: container, visual: { base, ohmLabel } };
 }
 
-export function makeTransistor(scene, x, y, idText = "T") {
+export function makeTransistor(scene, x, y, idText = "T0") {
   const container = scene.add.container(x, y).setDepth(20);
 
   const base = scene.add.rectangle(0, 20, 90, 60, 0xb7d7ff).setStrokeStyle(3, 0x1c4c7a);
@@ -134,13 +125,12 @@ export function makeTransistor(scene, x, y, idText = "T") {
   const label = scene.add.text(-18, 55, idText, { fontFamily: "Arial", fontSize: "14px", color: "#0b1020" });
 
   container.add([base, g, label]);
-
   container.setSize(150, 130);
 
-  return { container, hit: container, visual: { base, label } };
+  return { container, hit: container, visual: { base } };
 }
 
-export function makeLED(scene, x, y, idText = "L") {
+export function makeLED(scene, x, y, idText = "L0") {
   const container = scene.add.container(x, y).setDepth(20);
 
   const pole = scene.add.rectangle(0, 25, 10, 60, 0x444444);
@@ -148,12 +138,12 @@ export function makeLED(scene, x, y, idText = "L") {
   const bulb = scene.add.circle(0, -2, 8, 0x555555);
 
   const label = scene.add.text(-18, 55, idText, { fontFamily: "Arial", fontSize: "14px", color: "#0b1020" });
+  const voltLabel = scene.add.text(-28, 72, "V=0.00V", { fontFamily: "Arial", fontSize: "12px", color: "#0b1020" });
 
-  container.add([pole, head, bulb, label]);
+  container.add([pole, head, bulb, label, voltLabel]);
+  container.setSize(120, 150);
 
-  container.setSize(120, 140);
-
-  return { container, hit: container, visual: { bulb, head, label } };
+  return { container, hit: container, visual: { bulb, head, voltLabel } };
 }
 
 export function setHouseVisual(v, level) {
