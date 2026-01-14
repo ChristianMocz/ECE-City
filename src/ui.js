@@ -61,12 +61,12 @@ export function buildUI(scene, state) {
   toggleLine(3, "Advanced Mode (wire current)", () => state.advancedWireCurrent, v => state.advancedWireCurrent = v);
 
   // ----- Button helper -----
-  function makeBtn(x, y, w, h, text, onClick, fill = 0xffffff) {
-    const r = scene.add.rectangle(x, y, w, h, fill)
+  function makeBtn(cx, cy, w, h, text, onClick, fill = 0xffffff) {
+    const r = scene.add.rectangle(cx, cy, w, h, fill)
       .setDepth(200)
       .setInteractive({ useHandCursor: true });
 
-    scene.add.text(x - w / 2 + 10, y - 10, text, {
+    scene.add.text(cx - w / 2 + 10, cy - 10, text, {
       fontFamily: "Arial",
       fontSize: "13px",
       color: "#000",
@@ -76,33 +76,46 @@ export function buildUI(scene, state) {
     return r;
   }
 
-  // ✅ RUN CHECK centered top and WHITE
-  makeBtn(W / 2, 28, 220, 36, "RUN CHECK", () => scene.events.emit("run-check"), 0xffffff);
-
-  // ✅ Clean top-right grid (all same size, XFMR top-right)
+  // =========================
+  // TOP-RIGHT: RUN CHECK + TOOLS (NEAT, LEVEL, NO OFFSCREEN)
+  // =========================
   const PAD = 14;
-  const GAP = 10;
-  const BTN_W = 105;
+  const GAP = 8;
+  const BTN_W = 92;
   const BTN_H = 32;
 
-  // 4 columns, 2 rows
-  // Row 1: WIRE | HOUSE | LED | XFMR
-  // Row 2: RES  | TRANS | CAP | (empty)
-  const cols = 4;
-  const gridW = cols * BTN_W + (cols - 1) * GAP;
+  // Layout:
+  // Row 1 (5 columns): RUN CHECK | WIRE | HOUSE | LED | XFMR
+  // Row 2 (3 columns): RES | TRANS | CAP  (left-aligned under the row-1 block)
+  const COLS = 5;
+  const rowW = COLS * BTN_W + (COLS - 1) * GAP;
 
-  const startX = W - PAD - gridW + BTN_W / 2;
-  const row1Y = 28 + 46;             // under RUN CHECK
-  const row2Y = row1Y + BTN_H + GAP;
-
+  // Right-align the whole block
+  const startX = W - PAD - rowW + BTN_W / 2;
   const xAt = (c) => startX + c * (BTN_W + GAP);
 
-  // Row 1
-  makeBtn(xAt(0), row1Y, BTN_W, BTN_H, "WIRE", () => { state.mode = Mode.WIRE; setToolLabel(); });
-  makeBtn(xAt(1), row1Y, BTN_W, BTN_H, "HOUSE", () => { state.mode = Mode.PLACE_HOUSE; setToolLabel(); });
-  makeBtn(xAt(2), row1Y, BTN_W, BTN_H, "LED", () => { state.mode = Mode.PLACE_LED; setToolLabel(); });
+  const yRow1 = 28;
+  const yRow2 = yRow1 + BTN_H + GAP;
 
-  makeBtn(xAt(3), row1Y, BTN_W, BTN_H, "XFMR", () => {
+  // Row 1: RUN CHECK (yellow) + tools
+  makeBtn(xAt(0), yRow1, BTN_W, BTN_H, "RUN CHECK", () => scene.events.emit("run-check"), 0xffcc00);
+
+  makeBtn(xAt(1), yRow1, BTN_W, BTN_H, "WIRE", () => {
+    state.mode = Mode.WIRE;
+    setToolLabel();
+  });
+
+  makeBtn(xAt(2), yRow1, BTN_W, BTN_H, "HOUSE", () => {
+    state.mode = Mode.PLACE_HOUSE;
+    setToolLabel();
+  });
+
+  makeBtn(xAt(3), yRow1, BTN_W, BTN_H, "LED", () => {
+    state.mode = Mode.PLACE_LED;
+    setToolLabel();
+  });
+
+  makeBtn(xAt(4), yRow1, BTN_W, BTN_H, "XFMR", () => {
     const raw = prompt("Enter transformer ratio (0.5=step down, 2=step up):", String(state.placeXfmrRatio));
     if (raw !== null) {
       const v = Number(raw);
@@ -113,8 +126,8 @@ export function buildUI(scene, state) {
     scene.events.emit("toggles-changed");
   });
 
-  // Row 2
-  makeBtn(xAt(0), row2Y, BTN_W, BTN_H, "RES", () => {
+  // Row 2: RES | TRANS | CAP
+  makeBtn(xAt(0), yRow2, BTN_W, BTN_H, "RES", () => {
     const raw = prompt("Enter resistor value in ohms (example: 2):", String(state.placeResOhms));
     if (raw !== null) {
       const v = Number(raw);
@@ -125,12 +138,12 @@ export function buildUI(scene, state) {
     scene.events.emit("toggles-changed");
   });
 
-  makeBtn(xAt(1), row2Y, BTN_W, BTN_H, "TRANS", () => {
+  makeBtn(xAt(1), yRow2, BTN_W, BTN_H, "TRANS", () => {
     state.mode = Mode.PLACE_TRANS;
     setToolLabel();
   });
 
-  makeBtn(xAt(2), row2Y, BTN_W, BTN_H, "CAP", () => {
+  makeBtn(xAt(2), yRow2, BTN_W, BTN_H, "CAP", () => {
     const raw = prompt("Enter capacitor in µF (example: 220):", String(state.placeCapUF));
     if (raw !== null) {
       const v = Number(raw);
