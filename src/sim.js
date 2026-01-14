@@ -1,12 +1,5 @@
 // src/sim.js
-// KCL-based DC resistive network solver (node-voltage method)
-//
-// Fixes:
-// - Only solves the GEN-reachable conducting network (floating parts do nothing)
-// - Transistor OFF opens (edge removed)
-// - Resistors have per-part values: node.data.ohms
-// - ON/DIM/OFF is decided by VOLTAGE targets:
-//   House: ON at 9V, LED: ON at 3V
+// KCL node-voltage solver + capacitor transient to ground + transformer source nodes.
 
 function isTransistor(node) {
   return node && node.type === "TRANS";
@@ -21,15 +14,15 @@ function getLoadResistance(state, node) {
   return null;
 }
 
+// Edge resistance model
 function edgeResistance(state, fromNode, toNode) {
   let R = state.R_WIRE;
 
-  // Resistor behaves like a series element when you wire through it:
-  // GEN -> RES -> HOUSE
+  // treat RES as an inline resistor node: adds to any edge touching it
   if (toNode.type === "RES") R += (toNode.data?.ohms ?? state.RES_DEFAULT_OHMS);
   if (fromNode.type === "RES") R += (fromNode.data?.ohms ?? state.RES_DEFAULT_OHMS);
 
-  // Transistor ON behaves like a small extra resistance (closed switch)
+  // transistor ON adds small resistance; transistor OFF => edge removed elsewhere
   if (toNode.type === "TRANS" && transistorOn(toNode)) R += 0.5;
   if (fromNode.type === "TRANS" && transistorOn(fromNode)) R += 0.5;
 
@@ -45,7 +38,7 @@ function buildAdj(state) {
     const b = state.nodes.get(w.b);
     if (!a || !b) continue;
 
-    // OPEN switch: remove edges entirely
+    // OPEN switch: remove edge entirely
     if (isTransistor(a) && !transistorOn(a)) continue;
     if (isTransistor(b) && !transistorOn(b)) continue;
 
@@ -55,16 +48,15 @@ function buildAdj(state) {
     adj.get(w.a).push({ to: w.b, R: Rab });
     adj.get(w.b).push({ to: w.a, R: Rba });
   }
-
   return adj;
 }
 
-function reachableFromGEN(adj) {
+function reachableFrom(startId, adj) {
   const reachable = new Set();
-  if (!adj.has("GEN")) return reachable;
+  if (!adj.has(startId)) return reachable;
 
-  const stack = ["GEN"];
-  reachable.add("GEN");
+  const stack = [startId];
+  reachable.add(startId);
 
   while (stack.length) {
     const u = stack.pop();
@@ -79,6 +71,7 @@ function reachableFromGEN(adj) {
   return reachable;
 }
 
+// Gaussian elimination (small networks)
 function solveLinear(A, b) {
   const n = A.length;
   const M = A.map((row, i) => row.slice().concat([b[i]]));
@@ -104,7 +97,6 @@ function solveLinear(A, b) {
       for (let c = col; c <= n; c++) M[r][c] -= factor * M[col][c];
     }
   }
-
   return M.map(row => row[n]);
 }
 
@@ -122,22 +114,69 @@ function levelByVoltage(state, nodeType, Vn) {
   return "OFF";
 }
 
-export function computePower(state) {
-  const adj = buildAdj(state);
-  const reachable = reachableFromGEN(adj);
+// Transformer model:
+// If XFMR is GEN-reachable, treat it as a fixed-voltage source node:
+// V(XFMR) = ratio * V(GEN)
+function computeTransformerSources(state, reachableGEN) {
+  const sources = new Map();
+  sources.set("GEN", state.V);
 
-  // default everything to 0V
+  for (const node of state.nodes.values()) {
+    if (node.type !== "XFMR") continue;
+    if (!reachableGEN.has(node.id)) continue;
+
+    const ratio = node.data?.ratio ?? state.XFMR_DEFAULT_RATIO;
+    sources.set(node.id, ratio * state.V);
+  }
+  return sources;
+}
+
+/**
+ * Capacitor to ground using Backward Euler “companion model”:
+ * Gcap = C / dtCap and Ieq = Gcap * Vprev
+ *
+ * ✅ To make charging slower, we make dtCap SMALLER (bigger Gcap),
+ * which forces the capacitor node to change voltage gradually (tracks Vprev).
+ *
+ * state.capSlowFactor controls that:
+ * - 0.04  -> slow
+ * - 0.20  -> faster
+ */
+function capacitorCompanion(state, node, dt) {
+  const C = node.data?.C ?? 0; // Farads (stored when placed)
+  const slow = Math.max(0.001, Math.min(1.0, state.capSlowFactor ?? 0.04));
+
+  // smaller dtCap => larger G => stronger "memory" => slower voltage movement
+  const dtCap = Math.max(1e-5, dt * slow);
+
+  const G = C / dtCap;
+  const Vprev = node.data?.Vprev ?? 0;
+  const Ieq = G * Vprev;
+
+  return { G, Ieq };
+}
+
+export function computePower(state, dt = state.dt) {
+  const adj = buildAdj(state);
+
+  // Only solve the GEN-connected conducting network.
+  const reachableGEN = reachableFrom("GEN", adj);
+
+  // Transformers become additional fixed-voltage sources.
+  const fixedSources = computeTransformerSources(state, reachableGEN);
+
+  // Default everything to 0V
   const Vmap = new Map();
   for (const id of state.nodes.keys()) Vmap.set(id, 0);
 
-  // GEN fixed
-  if (state.nodes.has("GEN")) Vmap.set("GEN", state.V);
+  // Set fixed source node voltages
+  for (const [sid, v] of fixedSources.entries()) Vmap.set(sid, v);
 
-  // unknowns: GEN-reachable nodes except GEN
+  // Unknown nodes = GEN-reachable AND not fixed source nodes
   const unknownIds = [];
   for (const id of state.nodes.keys()) {
-    if (id === "GEN") continue;
-    if (!reachable.has(id)) continue;
+    if (!reachableGEN.has(id)) continue;
+    if (fixedSources.has(id)) continue;
     unknownIds.push(id);
   }
 
@@ -156,23 +195,30 @@ export function computePower(state) {
       if (!node) continue;
 
       let sumG = 0;
-      const edges = adj.get(id) || [];
 
+      // Edges
+      const edges = adj.get(id) || [];
       for (const e of edges) {
         const G = 1 / e.R;
         sumG += G;
 
-        if (e.to === "GEN") {
-          b[i] += G * state.V;
+        if (fixedSources.has(e.to)) {
+          b[i] += G * fixedSources.get(e.to);
         } else if (indexOf.has(e.to)) {
-          const j = indexOf.get(e.to);
-          A[i][j] -= G;
+          A[i][indexOf.get(e.to)] -= G;
         }
       }
 
-      // load-to-ground
+      // Loads to ground
       const Rload = getLoadResistance(state, node);
       if (Rload != null) sumG += 1 / Rload;
+
+      // Capacitor to ground (transient)
+      if (node.type === "CAP") {
+        const { G, Ieq } = capacitorCompanion(state, node, dt);
+        sumG += G;
+        b[i] += Ieq;
+      }
 
       A[i][i] += sumG;
     }
@@ -181,22 +227,67 @@ export function computePower(state) {
     for (let i = 0; i < N; i++) Vmap.set(unknownIds[i], Vunknown[i]);
   }
 
+  // Save voltages
   state.nodeVoltages = Vmap;
 
-  // compute “powered” info for loads
+  // Update capacitor memory (Vprev) = current voltage (capped naturally by the circuit)
+  for (const node of state.nodes.values()) {
+    if (node.type !== "CAP") continue;
+    const vnow = (reachableGEN.has(node.id) ? (Vmap.get(node.id) ?? 0) : 0);
+    node.data.Vprev = vnow;
+  }
+
+  // Load readouts (HOUSE/LED)
   state.powered = new Map();
   for (const node of state.nodes.values()) {
     if (node.type !== "HOUSE" && node.type !== "LED") continue;
 
-    if (!reachable.has(node.id)) {
-      state.powered.set(node.id, { V: 0, level: "OFF" });
+    if (!reachableGEN.has(node.id)) {
+      state.powered.set(node.id, { V: 0, I: 0, level: "OFF" });
       continue;
     }
 
     const Vn = Vmap.get(node.id) ?? 0;
-    const level = levelByVoltage(state, node.type, Vn);
-    state.powered.set(node.id, { V: Vn, level });
+    const Rload = getLoadResistance(state, node);
+    const I = Rload ? (Vn / Rload) : 0;
+
+    state.powered.set(node.id, {
+      V: Vn,
+      I,
+      level: levelByVoltage(state, node.type, Vn),
+    });
   }
 
+  computeWireMetrics(state);
   return state.powered;
+}
+
+export function computeWireMetrics(state) {
+  const Vmap = state.nodeVoltages || new Map();
+  const metrics = new Map();
+
+  function wireKey(a, b) {
+    return [a, b].sort().join("|");
+  }
+
+  for (const w of state.wires) {
+    const a = state.nodes.get(w.a);
+    const b = state.nodes.get(w.b);
+    if (!a || !b) continue;
+
+    if (isTransistor(a) && !transistorOn(a)) continue;
+    if (isTransistor(b) && !transistorOn(b)) continue;
+
+    const Rab = edgeResistance(state, a, b);
+    const Va = Vmap.get(w.a) ?? 0;
+    const Vb = Vmap.get(w.b) ?? 0;
+
+    const Vab = Va - Vb;
+    const Iab = (Rab > 0) ? (Vab / Rab) : 0;
+
+    metrics.set(wireKey(w.a, w.b), { R: Rab, Iab, Vab });
+  }
+
+  state.wireMetrics = metrics;
+  return metrics;
 }
