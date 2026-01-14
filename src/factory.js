@@ -75,11 +75,12 @@ export function makeHouse(scene, x, y, idText = "H0") {
 
   const idLabel = scene.add.text(-18, 55, idText, { fontFamily: "Arial", fontSize: "12px", color: "#0b1020" });
   const voltLabel = scene.add.text(-28, 70, "V=0.00V", { fontFamily: "Arial", fontSize: "12px", color: "#0b1020" });
+  const currLabel = scene.add.text(-28, 85, "I=0.00A", { fontFamily: "Arial", fontSize: "12px", color: "#0b1020" });
 
-  container.add([roof, body, window1, window2, idLabel, voltLabel]);
-  container.setSize(120, 140);
+  container.add([roof, body, window1, window2, idLabel, voltLabel, currLabel]);
+  container.setSize(120, 150);
 
-  return { container, hit: container, visual: { body, window1, window2, voltLabel } };
+  return { container, hit: container, visual: { body, window1, window2, voltLabel, currLabel } };
 }
 
 export function makeResistor(scene, x, y, idText = "R0", ohms = 2.0) {
@@ -106,6 +107,62 @@ export function makeResistor(scene, x, y, idText = "R0", ohms = 2.0) {
   container.setSize(140, 140);
 
   return { container, hit: container, visual: { base, ohmLabel } };
+}
+
+// ✅ CAP now looks clearly different (blue cylinder + plates)
+export function makeCapacitor(scene, x, y, idText = "C0", uF = 220) {
+  const container = scene.add.container(x, y).setDepth(20);
+
+  // body (cylinder-ish)
+  const body = scene.add.rectangle(0, 20, 70, 60, 0x7bb7ff).setStrokeStyle(3, 0x1f4f7a);
+  const top = scene.add.ellipse(0, -10, 70, 18, 0x9ad0ff).setStrokeStyle(3, 0x1f4f7a);
+
+  // leads
+  const leadL = scene.add.rectangle(-18, 45, 4, 20, 0x1f4f7a);
+  const leadR = scene.add.rectangle(18, 45, 4, 20, 0x1f4f7a);
+
+  // little + mark
+  const plus = scene.add.text(20, -2, "+", { fontFamily: "Arial", fontSize: "16px", color: "#0b1020" });
+
+  const label = scene.add.text(-18, 62, idText, { fontFamily: "Arial", fontSize: "14px", color: "#0b1020" });
+  const capLabel = scene.add.text(-34, 78, `${uF.toFixed(0)}µF`, { fontFamily: "Arial", fontSize: "12px", color: "#0b1020" });
+
+  container.add([body, top, leadL, leadR, plus, label, capLabel]);
+  container.setSize(140, 160);
+
+  return { container, hit: container, visual: { body, capLabel } };
+}
+
+// ✅ XFMR now looks like a substation (purple box + coils + tower)
+export function makeTransformer(scene, x, y, idText = "X0", ratio = 0.5) {
+  const container = scene.add.container(x, y).setDepth(20);
+
+  const base = scene.add.rectangle(0, 22, 120, 70, 0xe3ccff).setStrokeStyle(3, 0x4a2a7a);
+
+  const g = scene.add.graphics();
+  g.lineStyle(3, 0x4a2a7a, 1);
+  // coils
+  for (let i = -40; i <= -10; i += 10) g.strokeCircle(i, 22, 6);
+  for (let i = 10; i <= 40; i += 10) g.strokeCircle(i, 22, 6);
+
+  // substation tower icon
+  const tower = scene.add.graphics();
+  tower.lineStyle(3, 0x4a2a7a, 1);
+  tower.beginPath();
+  tower.moveTo(0, -18);
+  tower.lineTo(-12, 10);
+  tower.lineTo(12, 10);
+  tower.closePath();
+  tower.strokePath();
+  tower.lineBetween(-16, 0, 16, 0);
+
+  const label = scene.add.text(-18, 62, idText, { fontFamily: "Arial", fontSize: "14px", color: "#0b1020" });
+  const ratioLabel = scene.add.text(-50, 78, `ratio ${ratio.toFixed(2)}×`, { fontFamily: "Arial", fontSize: "12px", color: "#0b1020" });
+
+  container.add([base, g, tower, label, ratioLabel]);
+  container.setSize(180, 170);
+
+  return { container, hit: container, visual: { base, ratioLabel } };
 }
 
 export function makeTransistor(scene, x, y, idText = "T0") {
@@ -139,11 +196,12 @@ export function makeLED(scene, x, y, idText = "L0") {
 
   const label = scene.add.text(-18, 55, idText, { fontFamily: "Arial", fontSize: "14px", color: "#0b1020" });
   const voltLabel = scene.add.text(-28, 72, "V=0.00V", { fontFamily: "Arial", fontSize: "12px", color: "#0b1020" });
+  const currLabel = scene.add.text(-28, 87, "I=0.00A", { fontFamily: "Arial", fontSize: "12px", color: "#0b1020" });
 
-  container.add([pole, head, bulb, label, voltLabel]);
-  container.setSize(120, 150);
+  container.add([pole, head, bulb, label, voltLabel, currLabel]);
+  container.setSize(120, 160);
 
-  return { container, hit: container, visual: { bulb, head, voltLabel } };
+  return { container, hit: container, visual: { bulb, head, voltLabel, currLabel } };
 }
 
 export function setHouseVisual(v, level) {
@@ -162,17 +220,16 @@ export function setHouseVisual(v, level) {
   }
 }
 
-export function setLEDVisual(v, level) {
-  if (level === "ON") {
-    v.bulb.fillColor = 0xfff2a6;
-    v.head.fillColor = 0x444444;
-  } else if (level === "DIM") {
-    v.bulb.fillColor = 0xe6cf7a;
-    v.head.fillColor = 0x3b3b3b;
-  } else {
-    v.bulb.fillColor = 0x555555;
-    v.head.fillColor = 0x333333;
+export function setLEDVisual(v, level, brightness01 = null) {
+  const b = (brightness01 == null) ? null : Math.max(0, Math.min(1, brightness01));
+  if (b != null) {
+    if (b <= 0.02) { v.bulb.fillColor = 0x555555; v.head.fillColor = 0x333333; return; }
+    if (b < 0.6) { v.bulb.fillColor = 0xe6cf7a; v.head.fillColor = 0x3b3b3b; return; }
+    v.bulb.fillColor = 0xfff2a6; v.head.fillColor = 0x444444; return;
   }
+  if (level === "ON") { v.bulb.fillColor = 0xfff2a6; v.head.fillColor = 0x444444; }
+  else if (level === "DIM") { v.bulb.fillColor = 0xe6cf7a; v.head.fillColor = 0x3b3b3b; }
+  else { v.bulb.fillColor = 0x555555; v.head.fillColor = 0x333333; }
 }
 
 export function setTransistorVisual(v, on) {
