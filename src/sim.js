@@ -174,7 +174,7 @@ function levelByCurrentLED(state, I) {
   return "OFF";
 }
 
-export function computePower(state, dt = state.dt) {
+function computePower(state, dt = state.dt) {
   const adj = buildAdj(state);
   const bridges = buildComponentBridges(state, dt);
 
@@ -327,7 +327,7 @@ export function computePower(state, dt = state.dt) {
   return state.powered;
 }
 
-export function computeWireMetrics(state) {
+function computeWireMetrics(state) {
   const Vmap = state.nodeVoltages || new Map();
   const metrics = new Map();
   function wireKey(a, b) { return [a, b].sort().join("|"); }

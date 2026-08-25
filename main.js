@@ -1,22 +1,9 @@
-import { createGameState } from "./src/state.js";
-import { buildUI, Mode, showConfirmOverlay } from "./src/ui.js";
-import { computePower } from "./src/sim.js";
-import {
-  drawBackground,
-  addTownDecor,
-  makeGenerator,
-  makeGroundTerminal,
-  makeHouse,
-  makeResistor,
-  makeTransistor,
-  makeLED,
-  makeCapacitor,
-  makeTransformer,
-  setHouseVisual,
-  setLEDVisual,
-  setTransistorVisual,
-  playBurnoutEffect,
-} from "./src/factory.js";
+// main.js is loaded as a plain classic script (see index.html) after
+// src/ui.js, src/state.js, src/sim.js, and src/factory.js — in that order,
+// each of which defines top-level functions/consts directly. Deliberately
+// NOT ES modules: modules are blocked outright by browsers when a page is
+// opened via file:// (no server workaround exists), and this project's one
+// real requirement is "clone it, open index.html, it just works."
 
 const config = {
   type: Phaser.AUTO,

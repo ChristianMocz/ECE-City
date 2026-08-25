@@ -11,6 +11,14 @@
   </head>
   <body>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
-    <script type="module" src="./main.js"></script>
+    <!-- Plain classic scripts, not ES modules: modules are blocked entirely
+         by browsers when this file is opened via file:// (double-clicked),
+         with no server-side workaround. Order matters — each file defines
+         top-level globals the next one depends on. -->
+    <script src="./src/ui.js"></script>
+    <script src="./src/state.js"></script>
+    <script src="./src/sim.js"></script>
+    <script src="./src/factory.js"></script>
+    <script src="./main.js"></script>
   </body>
 </html>

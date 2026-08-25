@@ -1,5 +1,5 @@
 // src/ui.js
-export const Mode = {
+const Mode = {
   WIRE: "WIRE",
   DELETE: "DELETE",
   PLACE_HOUSE: "PLACE_HOUSE",
@@ -16,7 +16,7 @@ export const Mode = {
 // mobile, and just plain unfriendly to a kid) with big, obvious, tappable
 // buttons rendered on the canvas itself.
 // ---------------------------------------------------------------------------
-export function showChoiceOverlay(scene, { title, choices, onPick, onCancel }) {
+function showChoiceOverlay(scene, { title, choices, onPick, onCancel }) {
   const W = scene.scale.width, H = scene.scale.height;
   const layer = scene.add.container(0, 0).setDepth(500);
 
@@ -65,7 +65,7 @@ export function showChoiceOverlay(scene, { title, choices, onPick, onCancel }) {
   return layer;
 }
 
-export function showConfirmOverlay(scene, { title, message, confirmLabel = "Yes", cancelLabel = "No, keep it", onConfirm, danger = true }) {
+function showConfirmOverlay(scene, { title, message, confirmLabel = "Yes", cancelLabel = "No, keep it", onConfirm, danger = true }) {
   const W = scene.scale.width, H = scene.scale.height;
   const layer = scene.add.container(0, 0).setDepth(500);
 
@@ -101,7 +101,7 @@ export function showConfirmOverlay(scene, { title, message, confirmLabel = "Yes"
   return layer;
 }
 
-export function buildUI(scene, state) {
+function buildUI(scene, state) {
   const W = scene.scale.width;
 
   scene.add.text(20, 12, "ECE City (Power Grid)", {

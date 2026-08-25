@@ -15,7 +15,9 @@
 // and `${id}b` (return/ground-side lead), linked via data.pairId on both —
 // matching exactly how main.js places real components (see placeXxx there).
 
-import { computePower } from "../src/sim.js";
+// src/sim.js is loaded as a plain classic script by run-in-browser.html
+// (see index.html for why: ES modules are blocked entirely under file://),
+// so `computePower` is already a global by the time this module runs.
 
 // ---------- tiny test harness ----------
 let pass = 0, fail = 0;

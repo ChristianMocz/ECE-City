@@ -1,7 +1,6 @@
 // src/state.js
-import { Mode } from "./ui.js";
 
-export function createGameState() {
+function createGameState() {
   return {
     // graph
     nodes: new Map(),   // id -> node

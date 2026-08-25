@@ -24,7 +24,7 @@ function addTerminal(scene, x, y, kind) {
   return dot;
 }
 
-export function drawBackground(scene) {
+function drawBackground(scene) {
   const W = scene.scale.width;
   const H = scene.scale.height;
 
@@ -38,7 +38,7 @@ export function drawBackground(scene) {
   }
 }
 
-export function addTownDecor(scene) {
+function addTownDecor(scene) {
   addTree(scene, 80, 430);
   addTree(scene, 140, 470);
   addTree(scene, 220, 440);
@@ -47,14 +47,14 @@ export function addTownDecor(scene) {
   addTree(scene, 680, 445);
 }
 
-export function addTree(scene, x, y) {
+function addTree(scene, x, y) {
   scene.add.rectangle(x, y + 18, 12, 28, 0x7a4a22).setDepth(-97);
   scene.add.circle(x, y, 22, 0x2f8f2f).setDepth(-96);
   scene.add.circle(x - 18, y + 6, 18, 0x2a7f2a).setDepth(-96);
   scene.add.circle(x + 18, y + 8, 18, 0x2a7f2a).setDepth(-96);
 }
 
-export function makeGenerator(scene, x, y) {
+function makeGenerator(scene, x, y) {
   const container = scene.add.container(x, y).setDepth(20);
 
   const base = scene.add.rectangle(0, 20, 120, 70, 0x2b2b2b).setStrokeStyle(3, 0x111111);
@@ -81,7 +81,7 @@ export function makeGenerator(scene, x, y) {
   return { container, outHit: outDot, visual: { base, supplyLabel } };
 }
 
-export function makeGroundTerminal(scene, x, y) {
+function makeGroundTerminal(scene, x, y) {
   const container = scene.add.container(x, y).setDepth(20);
   const g = scene.add.graphics();
   g.lineStyle(4, 0x333333, 1);
@@ -96,7 +96,7 @@ export function makeGroundTerminal(scene, x, y) {
   return { container, inHit: inDot, visual: {} };
 }
 
-export function makeHouse(scene, x, y, idText = "H0") {
+function makeHouse(scene, x, y, idText = "H0") {
   const container = scene.add.container(x, y).setDepth(20);
 
   const body = scene.add.rectangle(0, 20, 90, 60, 0xe9e2d0).setStrokeStyle(3, 0x3a2f25);
@@ -127,7 +127,7 @@ export function makeHouse(scene, x, y, idText = "H0") {
   return { container, inHit: inDot, outHit: outDot, visual: { body, window1, window2, voltLabel, currLabel } };
 }
 
-export function makeResistor(scene, x, y, idText = "R0", ohms = 2.0) {
+function makeResistor(scene, x, y, idText = "R0", ohms = 2.0) {
   const container = scene.add.container(x, y).setDepth(20);
 
   const base = scene.add.rectangle(0, 20, 90, 50, 0xf0d36b).setStrokeStyle(3, 0x6b5a1d);
@@ -155,7 +155,7 @@ export function makeResistor(scene, x, y, idText = "R0", ohms = 2.0) {
   return { container, inHit: inDot, outHit: outDot, visual: { base, ohmLabel } };
 }
 
-export function makeCapacitor(scene, x, y, idText = "C0", uF = 220) {
+function makeCapacitor(scene, x, y, idText = "C0", uF = 220) {
   const container = scene.add.container(x, y).setDepth(20);
 
   const body = scene.add.rectangle(0, 20, 70, 60, 0x7bb7ff).setStrokeStyle(3, 0x1f4f7a);
@@ -176,7 +176,7 @@ export function makeCapacitor(scene, x, y, idText = "C0", uF = 220) {
   return { container, inHit: inDot, outHit: outDot, visual: { body, capLabel } };
 }
 
-export function makeTransformer(scene, x, y, idText = "X0", ratio = 0.5) {
+function makeTransformer(scene, x, y, idText = "X0", ratio = 0.5) {
   const container = scene.add.container(x, y).setDepth(20);
 
   const base = scene.add.rectangle(0, 22, 120, 70, 0xe3ccff).setStrokeStyle(3, 0x4a2a7a);
@@ -207,7 +207,7 @@ export function makeTransformer(scene, x, y, idText = "X0", ratio = 0.5) {
   return { container, priHit: priDot, secHit: secDot, visual: { base, ratioLabel } };
 }
 
-export function makeTransistor(scene, x, y, idText = "T0") {
+function makeTransistor(scene, x, y, idText = "T0") {
   const container = scene.add.container(x, y).setDepth(20);
 
   const base = scene.add.rectangle(0, 20, 90, 60, 0xb7d7ff).setStrokeStyle(3, 0x1c4c7a);
@@ -233,7 +233,7 @@ export function makeTransistor(scene, x, y, idText = "T0") {
   return { container, inHit: inDot, outHit: outDot, toggleHit: toggleZone, visual: { base } };
 }
 
-export function makeLED(scene, x, y, idText = "L0") {
+function makeLED(scene, x, y, idText = "L0") {
   const container = scene.add.container(x, y).setDepth(20);
 
   const pole = scene.add.rectangle(0, 25, 10, 60, 0x444444);
@@ -252,7 +252,7 @@ export function makeLED(scene, x, y, idText = "L0") {
   return { container, inHit: inDot, outHit: outDot, visual: { bulb, head, voltLabel, currLabel } };
 }
 
-export function setHouseVisual(v, level) {
+function setHouseVisual(v, level) {
   if (level === "ON") {
     v.window1.fillColor = 0xfff2a6;
     v.window2.fillColor = 0xfff2a6;
@@ -268,7 +268,7 @@ export function setHouseVisual(v, level) {
   }
 }
 
-export function setLEDVisual(v, level, brightness01 = null) {
+function setLEDVisual(v, level, brightness01 = null) {
   if (level === "BURNED") {
     v.bulb.fillColor = 0x1a1a1a;
     v.head.fillColor = 0x1a1a1a;
@@ -285,14 +285,14 @@ export function setLEDVisual(v, level, brightness01 = null) {
   else { v.bulb.fillColor = 0x555555; v.head.fillColor = 0x333333; }
 }
 
-export function setTransistorVisual(v, on) {
+function setTransistorVisual(v, on) {
   v.base.fillColor = on ? 0xb7d7ff : 0xaaaaaa;
 }
 
 // A short cartoon "pop" — a few particles-as-shapes bursting outward and
 // fading, plus a speech-bubble line in kid language. Reversible, funny, not
 // punishing (see AUDIT.md B4 / DESIGN.md's Kerbal Space Program section).
-export function playBurnoutEffect(scene, x, y, message) {
+function playBurnoutEffect(scene, x, y, message) {
   const colors = [0xffcc00, 0xff6633, 0xff3355, 0xffffff];
   for (let i = 0; i < 10; i++) {
     const angle = (i / 10) * Math.PI * 2;

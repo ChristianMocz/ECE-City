@@ -3,9 +3,9 @@
   "configurations": [
     {
       "name": "ece-city-static",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["tests/devserver.py", "8433"],
-      "port": 8433
+      "runtimeExecutable": "py",
+      "runtimeArgs": ["tests/devserver.py", "8502"],
+      "port": 8502
     }
   ]
 }
