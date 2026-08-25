@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>sim.js tests</title></head>
+  <body>
+    <pre id="out">running...</pre>
+    <script type="module">
+      const origLog = console.log;
+      const lines = [];
+      console.log = (...args) => { lines.push(args.join(" ")); origLog(...args); };
+      await import("./sim.test.mjs");
+      document.getElementById("out").textContent = lines.join("\n");
+      window.__DONE__ = true;
+    </script>
+  </body>
+</html>
