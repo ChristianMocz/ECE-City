@@ -1,4 +1,29 @@
 // src/factory.js
+//
+// Scene-graph builders. Every real component has two leads, so every
+// two-terminal device here exposes two small connector dots: an orange
+// "IN" dot (where power arrives, drawn near the top) and a blue "OUT" dot
+// (where the circuit continues onward, drawn near the bottom) — one
+// consistent rule across every component, so a kid only has to learn it
+// once. GEN only has an OUT dot (it's the source); GND only has an IN dot
+// (it's the return rail). The two dots are the only interactive/wireable
+// points; the body art itself is purely decorative.
+
+const HOT_COLOR = 0xff8a3d;
+const HOT_STROKE = 0x8a3d10;
+const GND_COLOR = 0x3d7aff;
+const GND_STROKE = 0x10307a;
+const TERMINAL_RADIUS = 8;
+const TERMINAL_DEPTH = 21;
+
+function addTerminal(scene, x, y, kind) {
+  const isHot = kind === "hot";
+  const dot = scene.add.circle(x, y, TERMINAL_RADIUS, isHot ? HOT_COLOR : GND_COLOR)
+    .setStrokeStyle(2, isHot ? HOT_STROKE : GND_STROKE)
+    .setDepth(TERMINAL_DEPTH);
+  return dot;
+}
+
 export function drawBackground(scene) {
   const W = scene.scale.width;
   const H = scene.scale.height;
@@ -47,11 +72,28 @@ export function makeGenerator(scene, x, y) {
 
   const bolt = scene.add.triangle(0, 18, -8, -6, 2, -6, -4, 18, 0xffcc00);
   const label = scene.add.text(-28, 62, "GEN", { fontFamily: "Arial", fontSize: "14px", color: "#ffffff" });
+  const supplyLabel = scene.add.text(-46, 82, "supplying 0.00A", { fontFamily: "Arial", fontSize: "12px", color: "#ffffff" });
 
-  container.add([roof, base, bolt, label]);
-  container.setSize(180, 160);
+  container.add([roof, base, bolt, label, supplyLabel]);
 
-  return { container, hit: container, visual: { base } };
+  const outDot = addTerminal(scene, x, y + 100, "hot");
+
+  return { container, outHit: outDot, visual: { base, supplyLabel } };
+}
+
+export function makeGroundTerminal(scene, x, y) {
+  const container = scene.add.container(x, y).setDepth(20);
+  const g = scene.add.graphics();
+  g.lineStyle(4, 0x333333, 1);
+  g.lineBetween(0, -20, 0, 10);
+  g.lineBetween(-22, 10, 22, 10);
+  g.lineBetween(-14, 18, 14, 18);
+  g.lineBetween(-6, 26, 6, 26);
+  const label = scene.add.text(-16, 34, "GND", { fontFamily: "Arial", fontSize: "13px", color: "#0b1020" });
+  container.add([g, label]);
+
+  const inDot = addTerminal(scene, x, y - 30, "gnd");
+  return { container, inHit: inDot, visual: {} };
 }
 
 export function makeHouse(scene, x, y, idText = "H0") {
@@ -78,9 +120,11 @@ export function makeHouse(scene, x, y, idText = "H0") {
   const currLabel = scene.add.text(-28, 85, "I=0.00A", { fontFamily: "Arial", fontSize: "12px", color: "#0b1020" });
 
   container.add([roof, body, window1, window2, idLabel, voltLabel, currLabel]);
-  container.setSize(120, 150);
 
-  return { container, hit: container, visual: { body, window1, window2, voltLabel, currLabel } };
+  const inDot = addTerminal(scene, x, y - 68, "hot");
+  const outDot = addTerminal(scene, x, y + 100, "gnd");
+
+  return { container, inHit: inDot, outHit: outDot, visual: { body, window1, window2, voltLabel, currLabel } };
 }
 
 export function makeResistor(scene, x, y, idText = "R0", ohms = 2.0) {
@@ -101,39 +145,37 @@ export function makeResistor(scene, x, y, idText = "R0", ohms = 2.0) {
   g.strokePath();
 
   const label = scene.add.text(-18, 55, idText, { fontFamily: "Arial", fontSize: "14px", color: "#0b1020" });
-  const ohmLabel = scene.add.text(-34, 72, `${ohms.toFixed(2)}Ω`, { fontFamily: "Arial", fontSize: "12px", color: "#0b1020" });
+  const ohmLabel = scene.add.text(-34, 72, `${ohms.toFixed(0)}Ω`, { fontFamily: "Arial", fontSize: "12px", color: "#0b1020" });
 
   container.add([base, g, label, ohmLabel]);
-  container.setSize(140, 140);
 
-  return { container, hit: container, visual: { base, ohmLabel } };
+  const inDot = addTerminal(scene, x, y - 18, "hot");
+  const outDot = addTerminal(scene, x, y + 90, "gnd");
+
+  return { container, inHit: inDot, outHit: outDot, visual: { base, ohmLabel } };
 }
 
-// ✅ CAP now looks clearly different (blue cylinder + plates)
 export function makeCapacitor(scene, x, y, idText = "C0", uF = 220) {
   const container = scene.add.container(x, y).setDepth(20);
 
-  // body (cylinder-ish)
   const body = scene.add.rectangle(0, 20, 70, 60, 0x7bb7ff).setStrokeStyle(3, 0x1f4f7a);
   const top = scene.add.ellipse(0, -10, 70, 18, 0x9ad0ff).setStrokeStyle(3, 0x1f4f7a);
 
-  // leads
   const leadL = scene.add.rectangle(-18, 45, 4, 20, 0x1f4f7a);
   const leadR = scene.add.rectangle(18, 45, 4, 20, 0x1f4f7a);
-
-  // little + mark
   const plus = scene.add.text(20, -2, "+", { fontFamily: "Arial", fontSize: "16px", color: "#0b1020" });
 
   const label = scene.add.text(-18, 62, idText, { fontFamily: "Arial", fontSize: "14px", color: "#0b1020" });
   const capLabel = scene.add.text(-34, 78, `${uF.toFixed(0)}µF`, { fontFamily: "Arial", fontSize: "12px", color: "#0b1020" });
 
   container.add([body, top, leadL, leadR, plus, label, capLabel]);
-  container.setSize(140, 160);
 
-  return { container, hit: container, visual: { body, capLabel } };
+  const inDot = addTerminal(scene, x, y - 38, "hot");
+  const outDot = addTerminal(scene, x, y + 96, "gnd");
+
+  return { container, inHit: inDot, outHit: outDot, visual: { body, capLabel } };
 }
 
-// ✅ XFMR now looks like a substation (purple box + coils + tower)
 export function makeTransformer(scene, x, y, idText = "X0", ratio = 0.5) {
   const container = scene.add.container(x, y).setDepth(20);
 
@@ -141,11 +183,9 @@ export function makeTransformer(scene, x, y, idText = "X0", ratio = 0.5) {
 
   const g = scene.add.graphics();
   g.lineStyle(3, 0x4a2a7a, 1);
-  // coils
   for (let i = -40; i <= -10; i += 10) g.strokeCircle(i, 22, 6);
   for (let i = 10; i <= 40; i += 10) g.strokeCircle(i, 22, 6);
 
-  // substation tower icon
   const tower = scene.add.graphics();
   tower.lineStyle(3, 0x4a2a7a, 1);
   tower.beginPath();
@@ -160,9 +200,11 @@ export function makeTransformer(scene, x, y, idText = "X0", ratio = 0.5) {
   const ratioLabel = scene.add.text(-50, 78, `ratio ${ratio.toFixed(2)}×`, { fontFamily: "Arial", fontSize: "12px", color: "#0b1020" });
 
   container.add([base, g, tower, label, ratioLabel]);
-  container.setSize(180, 170);
 
-  return { container, hit: container, visual: { base, ratioLabel } };
+  const priDot = addTerminal(scene, x, y - 40, "hot");
+  const secDot = addTerminal(scene, x, y + 96, "gnd");
+
+  return { container, priHit: priDot, secHit: secDot, visual: { base, ratioLabel } };
 }
 
 export function makeTransistor(scene, x, y, idText = "T0") {
@@ -180,11 +222,15 @@ export function makeTransistor(scene, x, y, idText = "T0") {
   g.strokePath();
 
   const label = scene.add.text(-18, 55, idText, { fontFamily: "Arial", fontSize: "14px", color: "#0b1020" });
+  const hint = scene.add.text(-40, 72, "(tap body to flip)", { fontFamily: "Arial", fontSize: "10px", color: "#0b1020" });
 
-  container.add([base, g, label]);
-  container.setSize(150, 130);
+  container.add([base, g, label, hint]);
 
-  return { container, hit: container, visual: { base } };
+  const inDot = addTerminal(scene, x, y - 28, "hot");
+  const outDot = addTerminal(scene, x, y + 85, "gnd");
+  const toggleZone = scene.add.zone(x, y + 20, 90, 60).setInteractive({ useHandCursor: true });
+
+  return { container, inHit: inDot, outHit: outDot, toggleHit: toggleZone, visual: { base } };
 }
 
 export function makeLED(scene, x, y, idText = "L0") {
@@ -199,9 +245,11 @@ export function makeLED(scene, x, y, idText = "L0") {
   const currLabel = scene.add.text(-28, 87, "I=0.00A", { fontFamily: "Arial", fontSize: "12px", color: "#0b1020" });
 
   container.add([pole, head, bulb, label, voltLabel, currLabel]);
-  container.setSize(120, 160);
 
-  return { container, hit: container, visual: { bulb, head, voltLabel, currLabel } };
+  const inDot = addTerminal(scene, x, y - 22, "hot");
+  const outDot = addTerminal(scene, x, y + 102, "gnd");
+
+  return { container, inHit: inDot, outHit: outDot, visual: { bulb, head, voltLabel, currLabel } };
 }
 
 export function setHouseVisual(v, level) {
@@ -221,6 +269,11 @@ export function setHouseVisual(v, level) {
 }
 
 export function setLEDVisual(v, level, brightness01 = null) {
+  if (level === "BURNED") {
+    v.bulb.fillColor = 0x1a1a1a;
+    v.head.fillColor = 0x1a1a1a;
+    return;
+  }
   const b = (brightness01 == null) ? null : Math.max(0, Math.min(1, brightness01));
   if (b != null) {
     if (b <= 0.02) { v.bulb.fillColor = 0x555555; v.head.fillColor = 0x333333; return; }
@@ -234,4 +287,43 @@ export function setLEDVisual(v, level, brightness01 = null) {
 
 export function setTransistorVisual(v, on) {
   v.base.fillColor = on ? 0xb7d7ff : 0xaaaaaa;
+}
+
+// A short cartoon "pop" — a few particles-as-shapes bursting outward and
+// fading, plus a speech-bubble line in kid language. Reversible, funny, not
+// punishing (see AUDIT.md B4 / DESIGN.md's Kerbal Space Program section).
+export function playBurnoutEffect(scene, x, y, message) {
+  const colors = [0xffcc00, 0xff6633, 0xff3355, 0xffffff];
+  for (let i = 0; i < 10; i++) {
+    const angle = (i / 10) * Math.PI * 2;
+    const dist = 26 + Math.random() * 14;
+    const chip = scene.add.circle(x, y, 4, colors[i % colors.length]).setDepth(300);
+    scene.tweens.add({
+      targets: chip,
+      x: x + Math.cos(angle) * dist,
+      y: y + Math.sin(angle) * dist,
+      alpha: 0,
+      duration: 420,
+      ease: "Cubic.Out",
+      onComplete: () => chip.destroy(),
+    });
+  }
+
+  const bubble = scene.add.container(x, y - 60).setDepth(301);
+  const pad = 10;
+  const txt = scene.add.text(0, 0, message, {
+    fontFamily: "Arial", fontSize: "13px", color: "#0b1020", align: "center", wordWrap: { width: 160 },
+  }).setOrigin(0.5);
+  const bg = scene.add.rectangle(0, 0, txt.width + pad * 2, txt.height + pad * 2, 0xffffff, 0.95)
+    .setStrokeStyle(2, 0x0b1020);
+  bubble.add([bg, txt]);
+
+  scene.tweens.add({
+    targets: bubble,
+    y: y - 90,
+    alpha: { from: 1, to: 0 },
+    duration: 2200,
+    delay: 500,
+    onComplete: () => bubble.destroy(),
+  });
 }
