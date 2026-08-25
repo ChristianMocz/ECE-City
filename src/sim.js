@@ -1,59 +1,120 @@
 // src/sim.js
-// KCL node-voltage solver + capacitor transient to ground + transformer source nodes.
+//
+// Modified-nodal-analysis KCL solver for the whole grid, plus a capacitor
+// transient (backward-Euler companion model) and an ideal-transformer stamp.
+//
+// The core idea: every real component has two leads. GEN is a Thevenin
+// source (ideal 12V EMF behind an internal resistance R_GEN) — not the
+// player-facing "GEN" node directly, but folded into that node's own KCL
+// row, so it behaves as if there were a hidden internal resistor between an
+// ideal battery and the terminal you actually wire to. GND is a true fixed
+// 0V reference. Every other placeable device (RES, TRANS, HOUSE, LED, CAP)
+// is modeled as a pair of graph nodes — a "hot" terminal and a "b" (return)
+// terminal — joined by one internal two-terminal branch (a conductance,
+// optionally with a bias current representing an internal EMF or stored
+// charge). Both terminals are real, independently-wireable nodes.
+//
+// This matters: it is what makes the closed-loop requirement (no current
+// without a real path back to GND) an *emergent property of ordinary nodal
+// analysis* rather than a special-cased rule. A component whose "b" terminal
+// never actually reaches GND through any chain of wires simply has nowhere
+// for current to go — the whole reachable island floats at a uniform,
+// current-free voltage, exactly like touching a voltmeter to an open switch.
+// No gating logic needed, no risk of a bolted-on shortcut silently bypassing
+// the resistance of whatever's actually in the return path.
+//
+// The transformer is the one exception that needs a genuine extra unknown:
+// see computeTransformerStamps for why (it's a real coupling, not just a
+// conductance, so it gets a proper MNA stamp with an auxiliary branch
+// current, which is also what makes power conservation fall out for free
+// instead of needing to be separately enforced).
 
-function isTransistor(node) {
-  return node && node.type === "TRANS";
-}
 function transistorOn(node) {
   return !!node?.data?.on;
 }
 
-function getLoadResistance(state, node) {
-  if (node.type === "HOUSE") return state.R_HOUSE;
-  if (node.type === "LED") return state.R_LED;
-  return null;
-}
+const TWO_TERMINAL_TYPES = new Set(["RES", "TRANS", "HOUSE", "LED", "CAP"]);
 
-// Edge resistance model
-function edgeResistance(state, fromNode, toNode) {
-  let R = state.R_WIRE;
-
-  // treat RES as an inline resistor node: adds to any edge touching it
-  if (toNode.type === "RES") R += (toNode.data?.ohms ?? state.RES_DEFAULT_OHMS);
-  if (fromNode.type === "RES") R += (fromNode.data?.ohms ?? state.RES_DEFAULT_OHMS);
-
-  // transistor ON adds small resistance; transistor OFF => edge removed elsewhere
-  if (toNode.type === "TRANS" && transistorOn(toNode)) R += 0.5;
-  if (fromNode.type === "TRANS" && transistorOn(fromNode)) R += 0.5;
-
-  return R;
+// Returns { G, bias } for the internal branch of a two-terminal component,
+// or null if the branch is open (switch off, LED already burned out — same
+// as a blown fuse: no conductance at all, not even a resistor's worth).
+// `bias` is an extra constant current pushed from the "b" terminal toward
+// the "hot" terminal — this is how an internal EMF (LED forward-voltage
+// drop) or remembered charge (capacitor) enters the linear system.
+function branchParams(state, hotNode, dt) {
+  switch (hotNode.type) {
+    case "RES": {
+      const ohms = hotNode.data?.ohms ?? state.RES_DEFAULT_OHMS;
+      return { G: 1 / ohms, bias: 0 };
+    }
+    case "TRANS": {
+      if (!transistorOn(hotNode)) return null; // open switch — no branch at all
+      return { G: 1 / 0.5, bias: 0 }; // small, real ON resistance
+    }
+    case "HOUSE": {
+      return { G: 1 / state.R_HOUSE, bias: 0 };
+    }
+    case "LED": {
+      if (hotNode.data?.burned) return null; // blown — open circuit, like a real dead LED
+      const G = 1 / state.R_LED_INTERNAL;
+      return { G, bias: G * state.V_LED_F };
+    }
+    case "CAP": {
+      // Backward-Euler companion model: a conductance G = C/dt in parallel
+      // with a current source representing the charge already stored
+      // (Vprev is the voltage *across* the capacitor from the last solve).
+      const C = hotNode.data?.C ?? 0;
+      const dtCap = Math.max(1e-5, dt);
+      const G = C / dtCap;
+      const Vprev = hotNode.data?.Vprev ?? 0;
+      return { G, bias: G * Vprev };
+    }
+    default:
+      return null;
+  }
 }
 
 function buildAdj(state) {
   const adj = new Map();
   for (const id of state.nodes.keys()) adj.set(id, []);
-
   for (const w of state.wires) {
-    const a = state.nodes.get(w.a);
-    const b = state.nodes.get(w.b);
-    if (!a || !b) continue;
-
-    // OPEN switch: remove edge entirely
-    if (isTransistor(a) && !transistorOn(a)) continue;
-    if (isTransistor(b) && !transistorOn(b)) continue;
-
-    const Rab = edgeResistance(state, a, b);
-    const Rba = edgeResistance(state, b, a);
-
-    adj.get(w.a).push({ to: w.b, R: Rab });
-    adj.get(w.b).push({ to: w.a, R: Rba });
+    if (!state.nodes.has(w.a) || !state.nodes.has(w.b)) continue;
+    adj.get(w.a).push({ to: w.b, R: state.R_WIRE });
+    adj.get(w.b).push({ to: w.a, R: state.R_WIRE });
   }
   return adj;
 }
 
-function reachableFrom(startId, adj) {
+// Component-internal connections (a resistor's two leads, a transformer's
+// primary<->secondary coupling) aren't wires, but reachability still needs
+// to hop across them — otherwise a device's "far" terminal would always
+// look unreachable even when it's clearly part of the energized network.
+// Bridges are only added when the branch is actually closed (an open
+// transistor or a burned LED does NOT bridge — the far side is genuinely
+// cut off, which is the whole point of a switch/fuse).
+function buildComponentBridges(state, dt) {
+  const links = new Map();
+  const add = (a, b) => {
+    if (!links.has(a)) links.set(a, []);
+    links.get(a).push(b);
+  };
+  for (const node of state.nodes.values()) {
+    if (node.type === "XFMR_SEC") {
+      const priId = node.data?.pairId;
+      if (priId && state.nodes.has(priId)) { add(node.id, priId); add(priId, node.id); }
+      continue;
+    }
+    if (!TWO_TERMINAL_TYPES.has(node.type)) continue;
+    const bId = node.data?.pairId;
+    if (!bId || !state.nodes.has(bId)) continue;
+    if (branchParams(state, node, dt)) { add(node.id, bId); add(bId, node.id); }
+  }
+  return links;
+}
+
+function reachableFrom(startId, adj, bridges = new Map()) {
   const reachable = new Set();
-  if (!adj.has(startId)) return reachable;
+  if (!adj.has(startId) && !bridges.has(startId)) return reachable;
 
   const stack = [startId];
   reachable.add(startId);
@@ -61,17 +122,20 @@ function reachableFrom(startId, adj) {
   while (stack.length) {
     const u = stack.pop();
     for (const e of (adj.get(u) || [])) {
-      const v = e.to;
-      if (!reachable.has(v)) {
-        reachable.add(v);
-        stack.push(v);
-      }
+      if (!reachable.has(e.to)) { reachable.add(e.to); stack.push(e.to); }
+    }
+    for (const v of (bridges.get(u) || [])) {
+      if (!reachable.has(v)) { reachable.add(v); stack.push(v); }
     }
   }
   return reachable;
 }
 
-// Gaussian elimination (small networks)
+// Gaussian elimination (small networks). Throws on a singular/near-singular
+// matrix instead of silently returning zeros — a solver that can't find an
+// answer and a circuit that's genuinely unpowered are different situations,
+// and reporting them identically ("everything OFF") hides real problems.
+// See computePower for how the caller turns this into state.solverError.
 function solveLinear(A, b) {
   const n = A.length;
   const M = A.map((row, i) => row.slice().concat([b[i]]));
@@ -81,11 +145,10 @@ function solveLinear(A, b) {
     for (let r = col + 1; r < n; r++) {
       if (Math.abs(M[r][col]) > Math.abs(M[pivot][col])) pivot = r;
     }
-    if (Math.abs(M[pivot][col]) < 1e-12) return new Array(n).fill(0);
-
-    if (pivot !== col) {
-      const tmp = M[col]; M[col] = M[pivot]; M[pivot] = tmp;
+    if (Math.abs(M[pivot][col]) < 1e-9) {
+      throw new Error("Singular or ill-conditioned circuit matrix");
     }
+    if (pivot !== col) { const tmp = M[col]; M[col] = M[pivot]; M[pivot] = tmp; }
 
     const div = M[col][col];
     for (let c = col; c <= n; c++) M[col][c] /= div;
@@ -100,162 +163,164 @@ function solveLinear(A, b) {
   return M.map(row => row[n]);
 }
 
-function levelByVoltage(state, nodeType, Vn) {
-  if (nodeType === "HOUSE") {
-    if (Vn >= state.V_HOUSE_ON) return "ON";
-    if (Vn >= state.V_HOUSE_DIM) return "DIM";
-    return "OFF";
-  }
-  if (nodeType === "LED") {
-    if (Vn >= state.V_LED_ON) return "ON";
-    if (Vn >= state.V_LED_DIM) return "DIM";
-    return "OFF";
-  }
+function levelByVoltage(state, Vn) {
+  if (Vn >= state.V_HOUSE_ON) return "ON";
+  if (Vn >= state.V_HOUSE_DIM) return "DIM";
   return "OFF";
 }
-
-// Transformer model:
-// If XFMR is GEN-reachable, treat it as a fixed-voltage source node:
-// V(XFMR) = ratio * V(GEN)
-function computeTransformerSources(state, reachableGEN) {
-  const sources = new Map();
-  sources.set("GEN", state.V);
-
-  for (const node of state.nodes.values()) {
-    if (node.type !== "XFMR") continue;
-    if (!reachableGEN.has(node.id)) continue;
-
-    const ratio = node.data?.ratio ?? state.XFMR_DEFAULT_RATIO;
-    sources.set(node.id, ratio * state.V);
-  }
-  return sources;
-}
-
-/**
- * Capacitor to ground using Backward Euler “companion model”:
- * Gcap = C / dtCap and Ieq = Gcap * Vprev
- *
- * ✅ To make charging slower, we make dtCap SMALLER (bigger Gcap),
- * which forces the capacitor node to change voltage gradually (tracks Vprev).
- *
- * state.capSlowFactor controls that:
- * - 0.04  -> slow
- * - 0.20  -> faster
- */
-function capacitorCompanion(state, node, dt) {
-  const C = node.data?.C ?? 0; // Farads (stored when placed)
-  const slow = Math.max(0.001, Math.min(1.0, state.capSlowFactor ?? 0.04));
-
-  // smaller dtCap => larger G => stronger "memory" => slower voltage movement
-  const dtCap = Math.max(1e-5, dt * slow);
-
-  const G = C / dtCap;
-  const Vprev = node.data?.Vprev ?? 0;
-  const Ieq = G * Vprev;
-
-  return { G, Ieq };
+function levelByCurrentLED(state, I) {
+  if (I >= state.I_LED_BRIGHT) return "ON";
+  if (I >= state.I_LED_GLOW) return "DIM";
+  return "OFF";
 }
 
 export function computePower(state, dt = state.dt) {
   const adj = buildAdj(state);
+  const bridges = buildComponentBridges(state, dt);
 
-  // Only solve the GEN-connected conducting network.
-  const reachableGEN = reachableFrom("GEN", adj);
+  const reachableGEN = reachableFrom("GEN", adj, bridges);
+  const unknownIds = [...reachableGEN].filter(id => id !== "GND");
 
-  // Transformers become additional fixed-voltage sources.
-  const fixedSources = computeTransformerSources(state, reachableGEN);
-
-  // Default everything to 0V
-  const Vmap = new Map();
-  for (const id of state.nodes.keys()) Vmap.set(id, 0);
-
-  // Set fixed source node voltages
-  for (const [sid, v] of fixedSources.entries()) Vmap.set(sid, v);
-
-  // Unknown nodes = GEN-reachable AND not fixed source nodes
-  const unknownIds = [];
-  for (const id of state.nodes.keys()) {
-    if (!reachableGEN.has(id)) continue;
-    if (fixedSources.has(id)) continue;
-    unknownIds.push(id);
+  const xfmrPairs = [];
+  for (const node of state.nodes.values()) {
+    if (node.type !== "XFMR_SEC") continue;
+    const priId = node.data?.pairId;
+    if (!priId) continue;
+    xfmrPairs.push({ priId, secId: node.id, ratio: node.data?.ratio ?? state.XFMR_DEFAULT_RATIO });
   }
+  const activeXfmrPairs = xfmrPairs.filter(p => unknownIds.includes(p.priId) && unknownIds.includes(p.secId));
 
   const N = unknownIds.length;
+  const K = activeXfmrPairs.length;
+  const M = N + K;
 
-  if (N > 0) {
+  const Vmap = new Map();
+  for (const id of state.nodes.keys()) Vmap.set(id, 0);
+  Vmap.set("GND", 0);
+
+  state.solverError = false;
+
+  if (M > 0) {
     const indexOf = new Map();
     unknownIds.forEach((id, i) => indexOf.set(id, i));
 
-    const A = Array.from({ length: N }, () => new Array(N).fill(0));
-    const b = new Array(N).fill(0);
+    const A = Array.from({ length: M }, () => new Array(M).fill(0));
+    const b = new Array(M).fill(0);
 
+    // Base rows: GEN's internal source, plain wire conductances.
     for (let i = 0; i < N; i++) {
       const id = unknownIds[i];
-      const node = state.nodes.get(id);
-      if (!node) continue;
-
       let sumG = 0;
 
-      // Edges
-      const edges = adj.get(id) || [];
-      for (const e of edges) {
-        const G = 1 / e.R;
-        sumG += G;
-
-        if (fixedSources.has(e.to)) {
-          b[i] += G * fixedSources.get(e.to);
-        } else if (indexOf.has(e.to)) {
-          A[i][indexOf.get(e.to)] -= G;
-        }
+      if (id === "GEN") {
+        const g = 1 / state.R_GEN;
+        sumG += g;
+        b[i] += g * state.V;
       }
 
-      // Loads to ground
-      const Rload = getLoadResistance(state, node);
-      if (Rload != null) sumG += 1 / Rload;
-
-      // Capacitor to ground (transient)
-      if (node.type === "CAP") {
-        const { G, Ieq } = capacitorCompanion(state, node, dt);
+      for (const e of (adj.get(id) || [])) {
+        const G = 1 / e.R;
         sumG += G;
-        b[i] += Ieq;
+        if (indexOf.has(e.to)) A[i][indexOf.get(e.to)] -= G;
+        // (an edge to GND contributes G*0 to b — nothing to add)
       }
 
       A[i][i] += sumG;
     }
 
-    const Vunknown = solveLinear(A, b);
-    for (let i = 0; i < N; i++) Vmap.set(unknownIds[i], Vunknown[i]);
+    // Two-terminal component branches (resistor, switch, house, LED, cap).
+    for (const node of state.nodes.values()) {
+      if (!TWO_TERMINAL_TYPES.has(node.type)) continue;
+      const bId = node.data?.pairId;
+      if (!bId || !indexOf.has(node.id) || !indexOf.has(bId)) continue;
+      const bp = branchParams(state, node, dt);
+      if (!bp) continue;
+
+      const hi = indexOf.get(node.id);
+      const gi = indexOf.get(bId);
+      A[hi][hi] += bp.G;
+      A[gi][gi] += bp.G;
+      A[hi][gi] -= bp.G;
+      A[gi][hi] -= bp.G;
+      b[hi] += bp.bias;
+      b[gi] -= bp.bias;
+    }
+
+    // Ideal transformer stamps (see header comment for the physical
+    // reasoning). One auxiliary unknown i_k per active transformer.
+    activeXfmrPairs.forEach((p, k) => {
+      const col = N + k;
+      const pi = indexOf.get(p.priId);
+      const si = indexOf.get(p.secId);
+      A[pi][col] += p.ratio;
+      A[si][col] += -1;
+      A[col][pi] += p.ratio;
+      A[col][si] += -1;
+      b[col] = 0;
+    });
+
+    let X;
+    try {
+      X = solveLinear(A, b);
+    } catch (e) {
+      state.solverError = true;
+      X = new Array(M).fill(0);
+    }
+    for (let i = 0; i < N; i++) Vmap.set(unknownIds[i], X[i]);
   }
 
-  // Save voltages
   state.nodeVoltages = Vmap;
 
-  // Update capacitor memory (Vprev) = current voltage (capped naturally by the circuit)
+  // Capacitor memory: remember the voltage ACROSS the cap (hot minus its
+  // own return terminal), not just its hot-side voltage in isolation.
   for (const node of state.nodes.values()) {
     if (node.type !== "CAP") continue;
-    const vnow = (reachableGEN.has(node.id) ? (Vmap.get(node.id) ?? 0) : 0);
+    const bId = node.data?.pairId;
+    const vnow = (!state.solverError && bId) ? (Vmap.get(node.id) ?? 0) - (Vmap.get(bId) ?? 0) : 0;
     node.data.Vprev = vnow;
   }
 
-  // Load readouts (HOUSE/LED)
+  // Load / device readouts.
   state.powered = new Map();
   for (const node of state.nodes.values()) {
     if (node.type !== "HOUSE" && node.type !== "LED") continue;
 
-    if (!reachableGEN.has(node.id)) {
-      state.powered.set(node.id, { V: 0, I: 0, level: "OFF" });
+    const bId = node.data?.pairId;
+    const Vhot = Vmap.get(node.id) ?? 0;
+    const Vgnd = bId ? (Vmap.get(bId) ?? 0) : 0;
+
+    if (node.type === "HOUSE") {
+      // Level (ON/DIM/OFF) is driven by the voltage actually ACROSS the
+      // house (Vhot - Vgnd) — the thing that actually pushes current through
+      // it — not the raw hot-terminal voltage. Those two are the same
+      // number in a properly closed loop, but they diverge for a dangling
+      // house (no return wire): Vhot can sit at the full source voltage
+      // with nothing on the other side to drop it across, which is exactly
+      // the "voltage without current" case this game wants a kid to be able
+      // to see (V reads real, but the house still correctly reads OFF).
+      const I = state.solverError ? 0 : (Vhot - Vgnd) / state.R_HOUSE;
+      const level = state.solverError ? "OFF" : levelByVoltage(state, Vhot - Vgnd);
+      state.powered.set(node.id, { V: state.solverError ? 0 : Vhot, I, level });
       continue;
     }
 
-    const Vn = Vmap.get(node.id) ?? 0;
-    const Rload = getLoadResistance(state, node);
-    const I = Rload ? (Vn / Rload) : 0;
-
-    state.powered.set(node.id, {
-      V: Vn,
-      I,
-      level: levelByVoltage(state, node.type, Vn),
-    });
+    // LED
+    if (node.data?.burned) {
+      state.powered.set(node.id, { V: 0, I: 0, level: "BURNED" });
+      continue;
+    }
+    if (state.solverError) {
+      state.powered.set(node.id, { V: 0, I: 0, level: "OFF" });
+      continue;
+    }
+    const I = Math.max(0, (Vhot - Vgnd - state.V_LED_F) / state.R_LED_INTERNAL);
+    if (I > state.I_LED_MAX) {
+      node.data.burned = true;
+      node.data.justBurned = true;
+      state.powered.set(node.id, { V: 0, I: 0, level: "BURNED" });
+      continue;
+    }
+    state.powered.set(node.id, { V: Vhot, I, level: levelByCurrentLED(state, I) });
   }
 
   computeWireMetrics(state);
@@ -265,27 +330,15 @@ export function computePower(state, dt = state.dt) {
 export function computeWireMetrics(state) {
   const Vmap = state.nodeVoltages || new Map();
   const metrics = new Map();
-
-  function wireKey(a, b) {
-    return [a, b].sort().join("|");
-  }
+  function wireKey(a, b) { return [a, b].sort().join("|"); }
 
   for (const w of state.wires) {
-    const a = state.nodes.get(w.a);
-    const b = state.nodes.get(w.b);
-    if (!a || !b) continue;
-
-    if (isTransistor(a) && !transistorOn(a)) continue;
-    if (isTransistor(b) && !transistorOn(b)) continue;
-
-    const Rab = edgeResistance(state, a, b);
+    if (!state.nodes.has(w.a) || !state.nodes.has(w.b)) continue;
     const Va = Vmap.get(w.a) ?? 0;
     const Vb = Vmap.get(w.b) ?? 0;
-
     const Vab = Va - Vb;
-    const Iab = (Rab > 0) ? (Vab / Rab) : 0;
-
-    metrics.set(wireKey(w.a, w.b), { R: Rab, Iab, Vab });
+    const Iab = state.R_WIRE > 0 ? Vab / state.R_WIRE : 0;
+    metrics.set(wireKey(w.a, w.b), { R: state.R_WIRE, Iab, Vab });
   }
 
   state.wireMetrics = metrics;
