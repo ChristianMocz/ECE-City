@@ -1,5 +1,13 @@
 # CHANGES.md
 
+## New-player update — October 2026
+
+- Every toolbar button (WIRE, + BUILD, DELETE, UNDO, REDO, LEVELS, TODAY, PHONE, HINT) is there from the start. Phone apps still unlock as you level up.
+- The welcome guide explains every button and every phone app, and scrolls (wheel, drag, ▲/▼ or the handle). It's also in PHONE → Settings → How to play.
+- A new town starts empty, just GEN and GND. You build your own houses with + BUILD. Missions still use the three-house starter board.
+- The GEN moved up so it and its dot sit on the grass, not the road. A power plant's name now shows to the right of it.
+- Music shuffles: each world starts with its own song, then moves through all 12 world songs, about a minute each.
+
 ## Clean-up: organised folders, short comments, readable names — October 2026
 
 No gameplay changes except one: **town orders now live only on the TODAY board** (the phone's Orders app is gone).

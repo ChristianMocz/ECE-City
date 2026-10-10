@@ -11,7 +11,10 @@
 //   chords: one scale step per bar (8 eighth notes), played by the bass.
 //   drums:  one token per eighth note: k kick, s snare, h hat, . nothing.
 //
-// Main pieces: SONGS, Music (play(key), stop(), setEnabled(), unlock()).
+// In the game, music shuffles: it starts with the current world's song, then
+// after a few loops moves on to another world's song, through all 12.
+//
+// Main pieces: SONGS, Music (play(key), shuffle(key), stop(), setEnabled(), unlock()).
 // Uses: Sfx from src/audio/sound.js for the audio context and mute.
 // Used by: src/ui/title.js, src/scene/start.js, src/scene/events.js, src/scene/contexts.js.
 
@@ -61,6 +64,8 @@ const SONGS = {
     chords: "0 2 1 0 3 4 2 0", drums: ". . . . s . . ." },
 };
 const SONG_KEYS = Object.keys(SONGS);
+const WORLD_SONGS = SONG_KEYS.filter(k => k !== "title");
+const LOOPS_PER_SONG = 4; // in shuffle, play each song this many times (about a minute)
 
 // Parse a song's melody into lead notes: [{ step, len, midi }].
 function songNotes(song) {
@@ -81,6 +86,8 @@ function midiHz(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
 const Music = (() => {
   let current = null, enabled = true, timer = null, nextTime = 0, stepIdx = 0, master = null, parsed = null;
+  // Shuffle: `anchor` is the world we started from; `queue` is what plays next.
+  let shuffling = false, anchor = null, queue = [];
   const KEY = "ececity.music";
   try { enabled = localStorage.getItem(KEY) !== "0"; } catch (e) { /* storage blocked: music on */ }
   const LOOKAHEAD = 0.35;
@@ -120,6 +127,7 @@ const Music = (() => {
     const chords = song.chords.trim().split(/\s+/).map(Number);
     const drums = song.drums.replace(/\s+/g, "");
     while (nextTime < a.currentTime + LOOKAHEAD) {
+      if (shuffling && stepIdx >= parsed.steps * LOOPS_PER_SONG) { nextSong(); return; }
       const i = stepIdx % parsed.steps;
       for (const n of parsed.notes) if (n.step === i) voice(a, song.lead, midiHz(n.midi), nextTime, n.len * stepLen * 0.95, 0.09 * (song.vol ?? 1));
       const bar = Math.floor(i / 8) % chords.length;
@@ -134,15 +142,40 @@ const Music = (() => {
       stepIdx++;
     }
   }
+  // Start a song from its first note. Keeps nextTime so songs join smoothly.
+  function start(key) {
+    current = key; parsed = songNotes(SONGS[key]); stepIdx = 0;
+    if (master) { try { master.gain.value = 0.22; } catch (e) {} }
+    if (!timer && typeof setInterval === "function") timer = setInterval(() => { try { schedule(); } catch (e) { /* audio refused: stay silent */ } }, 100);
+  }
+  // Next song in the shuffle. A fresh random order once every song has played.
+  function nextSong() {
+    if (!queue.length) {
+      queue = WORLD_SONGS.filter(k => k !== current);
+      for (let i = queue.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [queue[i], queue[j]] = [queue[j], queue[i]]; }
+    }
+    start(queue.shift());
+  }
   return {
+    // Play one song on repeat (the title screen).
     play(key) {
       if (!SONGS[key]) return;
+      shuffling = false; anchor = null;
       if (current === key) return;
-      current = key; parsed = songNotes(SONGS[key]); stepIdx = 0; nextTime = 0;
-      if (master) { try { master.gain.value = 0.22; } catch (e) {} }
-      if (!timer && typeof setInterval === "function") timer = setInterval(() => { try { schedule(); } catch (e) { /* audio refused: stay silent */ } }, 100);
+      nextTime = 0;
+      start(key);
     },
-    stop() { current = null; },
+    // Shuffle through the world songs, starting with `key`. Calling it again
+    // with the same world keeps the music going.
+    shuffle(key) {
+      if (!SONGS[key]) key = WORLD_SONGS[0];
+      if (shuffling && anchor === key) return;
+      shuffling = true; anchor = key; queue = [];
+      if (current === key) return;
+      nextTime = 0;
+      start(key);
+    },
+    stop() { current = null; shuffling = false; anchor = null; },
     get playing() { return current; },
     get enabled() { return enabled; },
     setEnabled(on) {

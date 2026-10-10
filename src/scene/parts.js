@@ -131,11 +131,11 @@ function makeGenerator(scene, x, y) {
   const lights = scene.add.image(0, 5, "gen_lights").setVisible(false);
   // A wind turbine's spinning blades (only shown for that plant).
   const blades = scene.add.image(1.5, -23.5, scene.textures.exists("plant_wind_blades") ? "plant_wind_blades" : "gen").setVisible(false);
-  const label = partLabel(scene, 0, 58, "GEN", 15);
-  const supplyLabel = partLabel(scene, 0, 76, "supplying 0.00A", 13);
-  const plantLabel = partLabel(scene, 0, -58, "", 12);
+  const label = partLabel(scene, 0, 54, "GEN", 15);
+  const supplyLabel = partLabel(scene, 0, 70, "supplying 0.00A", 13);
+  const plantLabel = partLabel(scene, 68, 4, "", 12, 0); // to the right: above it is the toolbar
   container.add([base, lights, blades, label, supplyLabel, plantLabel]);
-  const outDot = addTerminal(scene, x, y + 100, "hot");
+  const outDot = addTerminal(scene, x, y + 92, "hot");
   const visual = { base, lights, blades, label, supplyLabel, plantLabel, stacks: [], steam: false, tintables: [base], x, y, plant: "generator" };
   setGeneratorPlant(visual, "generator");
   return { container, outHit: outDot, visual };

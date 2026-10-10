@@ -213,7 +213,7 @@ function regionWeather(weather, key) {
 
 // Each region's first town board (the same format as a saved town).
 const REGION_STARTERS = {
-  sparkville: null, // uses STARTER_TOWN from src/rules/missions.js
+  sparkville: { counters: { H: 0 }, parts: [], wires: [] }, // empty: you build your first houses
   batterybay: {
     counters: { H: 2, B: 1 },
     parts: [

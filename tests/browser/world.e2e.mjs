@@ -272,7 +272,7 @@ console.log('Sidekick and stickers');
   });
   await t('HOW TO opens the how-to-play box any time', async () => {
     await h.btn('HOWTO');
-    ok((await texts()).includes('Getting started'), JSON.stringify(await texts()));
+    ok((await texts()).includes('The buttons'), JSON.stringify(await texts()));
     await h.tap('intro:go');
   });
   await t('no errors', async () => { eq(h.errors, [], 'errors'); });

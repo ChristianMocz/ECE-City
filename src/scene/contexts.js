@@ -51,11 +51,11 @@ function installContexts(city) {
     city.refreshBadges();
   }
 
-  // Each world has its own song (src/audio/music.js).
+  // Music: starts with this world's song, then shuffles (src/audio/music.js).
   function playMusicHere() {
     if (city.titleLayer && city.titleLayer.active && !city.titleLayer.isClosing) { Music.play("title"); return; }
     const world = state.context === "level" && state.level ? state.level.def.world : state.context === "boss" && state.boss ? state.boss.region : profile.region;
-    Music.play(SONGS[world] ? world : "sparkville");
+    Music.shuffle(SONGS[world] ? world : "sparkville");
   }
 
   function saveTown() {

@@ -1,13 +1,13 @@
 // src/scene/toolbar.js
 //
-// The toolbar: which buttons show (they unlock as you play), the badges on
-// them, the phone's app list, and the "New!" message when something unlocks.
+// The toolbar: which buttons show, the badges on them, the phone's app list,
+// and the "New!" message when a phone app unlocks.
 //
 // Gives city: phoneApps, refreshBadges.
 // Uses: src/rules/progress.js (features, toolbarFor, todayItems).
 
 function installToolbar(city) {
-  const { onEvent, profile, refreshHud, save, scene, setToolbar, state, status } = city;
+  const { profile, refreshHud, save, scene, setToolbar, state, status } = city;
   // Buttons the current board needs, whatever the player has unlocked.
   function toolbarNeeds() {
     if (state.context === "level" && state.level) return levelNeeds(state.level.def);
@@ -38,9 +38,7 @@ function installToolbar(city) {
     const now = new Date();
     const vis = toolbarFor(profile, { needs: toolbarNeeds() });
     if (state.level && state.level.mode === "noundo" && !state.level.done) { vis.undo = false; vis.redo = false; vis.hint = false; }
-    const news = new Set(["undo", "today", "phone", "delete", "build"].filter(k => vis[k] && featureIsNew(profile, k)));
-    if (news.has("undo")) news.add("redo");
-    setToolbar(vis, news);
+    setToolbar(vis);
     const apps = phoneApps();
     const todayCount = todayItems(profile, city.todayCtx()).filter(i => i.action && i.urgent).length;
     refreshHud({
@@ -64,11 +62,5 @@ function installToolbar(city) {
       });
     }
   }
-  // Tapping a button clears its "New!" tag.
-  onEvent("button-tapped", (name) => {
-    const key = name === "redo" ? "undo" : name;
-    if (FEATURES[key] && featureIsNew(profile, key)) { markFeatureSeen(profile, key); save(); refreshBadges(); }
-  });
-
   Object.assign(city, { phoneApps, refreshBadges });
 }

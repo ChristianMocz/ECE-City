@@ -35,28 +35,69 @@ function showStickers(scene, { profile }) {
 }
 
 // --- How to play ---
-// Shown the first time the game opens, and from PHONE > Settings.
+// Shown the first time the game opens, and from PHONE > Settings. Explains
+// every button and phone app; scrolls when it's too long.
+const GUIDE_BUTTONS = [
+  ["WIRE", "Tap a dot, then another dot, to join them with a wire. Orange dots are the + side, blue dots go back to ground."],
+  ["+ BUILD", "Pick a house, part, building or decoration, then tap the grass to place it."],
+  ["DELETE", "Tap a wire or a part to remove it. Parts go back in your BUILD box."],
+  ["UNDO", "Takes back your last change."],
+  ["REDO", "Puts back what you just undid."],
+  ["LEVELS ★", "Puzzles with up to 3 stars. Each world teaches a new idea. A great place to start!"],
+  ["TODAY", "Your to-do list: the next level, the Captain, emergencies, town orders and daily gifts."],
+  ["PHONE", "Your engineer's phone. All the extra stuff lives in here (see below)."],
+  ["? HINT", "Stuck? Sparky gives you a tip for what you're doing right now."],
+];
+const GUIDE_EXTRAS = [
+  ["Your engineer", "Top right: your coins, level and XP. Tap your engineer to change clothes."],
+  ["Toggles", "Top left: show volts and amps, show wire details, and turn Sparky's guessing game on or off."],
+  ["Tap a part", "Tap a dark house or LED and Sparky tells you why it's dark. Drag a part to move it."],
+];
+const GUIDE_APPS = [
+  ["Town", [["coin", "Shop", "Buy buildings, decorations and power plants."], ["chest", "Daily", "A free gift and a new puzzle every day."], ["moon", "Skip time", "Jump to night or to morning."], ["ico_tools", "Clear board", "Remove all your wires and start fresh."], ["led_on", "Count lights", "Counts how many lights are on."]]],
+  ["World", [["map_pin", "World map", "Travel to 12 worlds and fight Captain Short Circuit."], ["pylon", "Power lines", "Send power between towns."]]],
+  ["Me", [["person", "Clothes", "Dress up your engineer and your pet."], ["ico_book", "Notebook", "Cards for everything you've learned."], ["ico_trophy", "Records", "Your progress, best times and challenges."], ["badge", "Stickers", "Your sticker book."]]],
+  ["Make", [["ico_tools", "Puzzle maker", "Build your own puzzle and share its code."], ["ico_phone", "Play a code", "Type in a friend's puzzle code."]]],
+  ["Settings", [["ico_gear", "Settings", "Music, sound, Sparky and emergencies."], ["sparky", "How to play", "Opens this guide again."], ["house", "Save & title", "Your 3 save files and the title screen."]]],
+];
 function showIntro(scene, { onClose }) {
-  const s = openScreen(scene, { title: "Welcome to ECE City!", width: 660, height: 540, onClose });
-  s.layer.add(scene.add.image(s.left + 76, s.top + 108, "sparky").setScale(1.8));
-  screenText(scene, s.layer, s.left + 130, s.top + 64, "Hi, I'm Sparky! You're the new town engineer. Wire up the town so every light shines.", { size: 15, bold: true, originX: 0, originY: 0, align: "left", wrap: 500 });
-  const block = (y, title, lines) => {
-    screenText(scene, s.layer, s.left + 40, y, title, { size: 16, bold: true, color: "#b13e53", originX: 0, originY: 0 });
-    screenText(scene, s.layer, s.left + 40, y + 24, lines.map(l => "• " + l).join("\n"), { size: 13, originX: 0, originY: 0, align: "left", wrap: 580 });
-  };
-  block(s.top + 168, "Getting started", [
-    "WIRE: tap a dot, then another dot, to join them with a wire.",
-    "LEVELS ★: puzzles with up to 3 stars — start here! Stuck? Tap ? HINT.",
-    "Tap a dark house to find out why it's dark.",
-  ]);
-  block(s.top + 290, "More buttons appear as you play", [
-    "TODAY tells you what to do next (and your town's orders). Your PHONE holds the shop, clothes,",
-    "the world map, your Notebook, the Puzzle maker and settings.",
-  ]);
-  block(s.top + 382, "Coins and XP", [
-    "Stars, orders, Sparky's guesses, the daily puzzle and boss fights all pay.",
-    "Each new level unlocks parts, buildings, power plants, clothes and worlds (12 in all!).",
-  ]);
+  const s = openScreen(scene, { title: "Welcome to ECE City!", width: 720, height: 580, onClose });
+  const left = s.left + 30, width = s.width - 90, top = s.top + 60, height = s.height - 130;
+  scrollPane(scene, s, { left, top, width, height, fill: (pane) => {
+    let y = top;
+    const text = (x, str, opts) => screenText(scene, pane, x, y, str, { originX: 0, originY: 0, align: "left", ...opts });
+    const heading = (str) => { y += 8; const t = text(left, str, { size: 17, bold: true, color: "#b13e53" }); y += t.height + 8; };
+    const para = (str) => { const t = text(left, str, { size: 13, wrap: width }); y += t.height + 8; };
+    // A row: a chip (button name) or icon on the left, its explanation on the right.
+    const row = (chip, icon, title, desc) => {
+      const y0 = y;
+      if (icon) fitImage(scene, pane, left + 22, y0 + 14, icon, 34, 30);
+      else {
+        pane.add(scene.add.rectangle(left + 52, y0 + 13, 100, 26, PALN["B"]).setStrokeStyle(2, UI_INK));
+        screenText(scene, pane, left + 52, y0 + 13, chip, { size: 13, bold: true });
+      }
+      const tx = icon ? left + 50 : left + 116;
+      const t = text(tx, title ? `${title}: ${desc}` : desc, { size: 13, wrap: width - (tx - left) });
+      y = Math.max(y0 + 30, y0 + t.height + 2) + 8;
+    };
+    pane.add(scene.add.image(left + 40, y + 40, "sparky").setScale(1.6));
+    const hi = screenText(scene, pane, left + 96, y + 6, "Hi, I'm Sparky! You're the new town engineer. Your town starts empty, so it's up to you to build it and keep every light on.", { size: 15, bold: true, originX: 0, originY: 0, align: "left", wrap: width - 100 });
+    y += Math.max(86, hi.height + 16);
+    heading("Your first house");
+    para("1. Tap + BUILD, pick House, and tap the grass to place it.\n2. Tap WIRE. Tap GEN's orange dot, then the house's orange dot.\n3. Then wire the house's blue dot to GND. Power needs a full loop: out of GEN and back to ground!");
+    heading("The buttons");
+    for (const [name, desc] of GUIDE_BUTTONS) row(name, null, null, desc);
+    for (const [name, desc] of GUIDE_EXTRAS) row(name, null, null, desc);
+    heading("Inside your PHONE");
+    para("The phone has 5 tabs. Some apps show up as you level up.");
+    for (const [tab, apps] of GUIDE_APPS) {
+      const t = text(left, tab, { size: 14, bold: true, color: "#29366f" }); y += t.height + 6;
+      for (const [icon, name, desc] of apps) row(null, icon, name, desc);
+    }
+    heading("Coins and XP");
+    para("Stars, orders, Sparky's guesses, the daily puzzle and boss fights all pay coins and XP. Each new level unlocks parts, buildings, power plants, clothes and worlds (12 in all!).");
+    return y - top;
+  } });
   const go = screenButton(scene, s.layer, s.cx, s.top + s.height - 36, 200, 44, "Let's go!", { fill: PALN["4"], fontSize: 17 }, () => s.close());
   go.hit.tag = "intro:go";
   screenText(scene, s.layer, s.left + s.width - 20, s.top + s.height - 36, "(PHONE → Settings → How to play)", { size: 11, color: "#566c86", originX: 1 });

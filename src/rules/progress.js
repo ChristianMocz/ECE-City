@@ -1,8 +1,8 @@
 // src/rules/progress.js
 //
 // What you've unlocked, what to do next, and what you've learned.
-// Features appear as you play ("unlock as you go"): a new player sees only
-// WIRE, LEVELS and HINT. Pure logic, no Phaser (tests/progress.test.mjs).
+// Every toolbar button is there from the start; phone apps appear as you
+// play ("unlock as you go"). Pure logic, no Phaser (tests/progress.test.mjs).
 //
 // Main pieces: FEATURES and toolbarFor() (unlocks), todayItems() (Today board),
 // NOTEBOOK (Engineer's Notebook cards), recordChallenge() and gameProgress() (Records).
@@ -16,11 +16,11 @@ const FEATURES = {
   wire:     { where: "bar", name: "WIRE", unlock: () => true },
   levels:   { where: "bar", name: "LEVELS", unlock: () => true },
   hint:     { where: "bar", name: "HINT", unlock: () => true },
-  undo:     { where: "bar", name: "UNDO and REDO", unlock: (p) => doneLevel(p, "sparkville-1") || playerLvl(p) >= 2, say: "UNDO takes back your last change (and REDO puts it back)." },
-  today:    { where: "bar", name: "TODAY", unlock: (p) => doneLevel(p, "sparkville-2") || playerLvl(p) >= 2, say: "TODAY tells you what to do next." },
-  phone:    { where: "bar", name: "PHONE", unlock: (p) => doneLevel(p, "sparkville-2") || playerLvl(p) >= 2, say: "Your engineer's PHONE: the shop, clothes, map and settings live in it." },
-  delete:   { where: "bar", name: "DELETE", unlock: (p) => doneLevel(p, "sparkville-4") || playerLvl(p) >= 3, say: "DELETE removes a wire or a part — tap it, then tap what to remove." },
-  build:    { where: "bar", name: "+ BUILD", unlock: (p) => doneLevel(p, "sparkville-6") || playerLvl(p) >= 3, say: "+ BUILD: place houses, resistors, LEDs and more in your town." },
+  undo:     { where: "bar", name: "UNDO and REDO", unlock: () => true },
+  today:    { where: "bar", name: "TODAY", unlock: () => true },
+  phone:    { where: "bar", name: "PHONE", unlock: () => true },
+  delete:   { where: "bar", name: "DELETE", unlock: () => true },
+  build:    { where: "bar", name: "+ BUILD", unlock: () => true },
   // Phone apps.
   settings: { where: "phone", tab: "settings", name: "Settings", icon: "ico_gear", unlock: () => true },
   howto:    { where: "phone", tab: "settings", name: "How to play", icon: "sparky", unlock: () => true },

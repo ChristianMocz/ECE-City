@@ -44,7 +44,7 @@ console.log('A new player');
   await t('the first time, a "how to play" box explains coins and levels', async () => {
     await h.page.waitForFunction(() => { const sc = window.__games[0].scene.scenes[0]; let f = false; const w = (l) => { for (const o of l) { if (o.tag === 'intro:go' && o.active) f = true; if (o.list) w(o.list); } }; w(sc.children.list); return f; }, null, { timeout: 15000 });
     const tx = (await texts()).join(' ');
-    ok(tx.includes('Getting started') && tx.includes('LEVELS') && tx.includes('PHONE') && tx.includes('XP'), tx);
+    ok(tx.includes('Your first house') && tx.includes('LEVELS') && tx.includes('PHONE') && tx.includes('XP'), tx);
     await h.tap('intro:go');
     eq(await P(a => a.profile.seenIntro), true, 'remembered');
     eq(await h.page.evaluate(() => JSON.parse(localStorage.getItem('ececity.save.v1')).seenIntro), true, 'saved');
@@ -67,13 +67,12 @@ console.log('A new player');
     ok((await texts()).includes('Already opened today!'), JSON.stringify(await texts()));
     await closeScreen();
   });
-  await t('a brand-new player sees only WIRE, LEVELS and HINT (more appear as levels are finished)', async () => {
+  await t('a brand-new player has every toolbar button and an empty town', async () => {
     const v = await P(a => a.toolbar());
-    eq(Object.keys(v).filter(k => v[k]).sort(), ['hint', 'levels', 'wire'], 'toolbar');
+    ok(Object.values(v).every(Boolean), JSON.stringify(v));
+    eq(await h.S((sc, st) => [...st.nodes.keys()].sort()), ['GEN', 'GND'], 'empty town');
     // Finish the first six levels (no XP, so we stay at level 1 for the tests below).
     await P(a => { for (let i = 1; i <= 6; i++) a.profile.campaign['sparkville-' + i] = 1; a.profile.announced = [...FEATURE_KEYS]; a.profile.seenFeatures = [...FEATURE_KEYS]; a.refreshBadges(); });
-    const w = await P(a => a.toolbar());
-    ok(Object.values(w).every(Boolean), JSON.stringify(w));
   });
   await t('three orders are waiting and none is already done', async () => {
     const o = await P(a => a.profile.orders.map(o => o && o.kind));
@@ -107,6 +106,7 @@ console.log('A new player');
     eq(await h.S((sc, st) => st.context), 'town', 'still in town');
   });
   await t('a light order: wiring the building pays coins + XP and the slot refills later', async () => {
+    await P(a => a.loadTown(STARTER_TOWN)); // three houses to light
     await helpers(h).clearOrders();
     await P(a => { a.profile.settings.sparky = false; });
     await helpers(h).setOrder(1, { kind: 'light', target: 'H1', name: 'house H1', who: 'Mr. Patel', coins: 12, xp: 10 });

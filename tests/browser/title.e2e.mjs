@@ -71,7 +71,8 @@ await t('after a restart every button works exactly once (no doubled listeners)'
   await h.btn('SHOP'); await h.page.waitForTimeout(100);
   eq(await h.S(sc => sc.children.list.filter(o => o.type === 'Container' && o.depth === 500 && o.active).length), 1, 'one shop screen');
   await h.tap('close');
-  await h.btn('WIRE'); await h.wireIt('GEN', 'H1');
+  await h.btn('BUILD'); await h.tap('build:HOUSE'); await h.click(650, 260); // a new town is empty
+  await h.btn('WIRE'); await h.wireIt('GEN', 'H0');
   const undoBefore = await h.S((sc, st) => st.undoStack.length);
   await h.btn('UNDO');
   eq(await h.S((sc, st) => st.undoStack.length), undoBefore - 1, 'one undo');

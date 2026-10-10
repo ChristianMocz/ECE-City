@@ -12,7 +12,7 @@
 // [top dot dy, bottom dot dy] from where each part is placed.
 // Must match the make* functions in src/scene/parts.js (the browser tests check this).
 const DOT_OFFSETS = { HOUSE: [-68, 100], RES: [-18, 90], CAP: [-38, 96], XFMR: [-40, 96], TRANS: [-28, 85], LED: [-22, 102], SOLAR: [-30, 85], BAT: [-30, 82] };
-const GEN_DOT = { x: 130, y: 360 };
+const GEN_DOT = { x: 130, y: 282 };
 const GND_DOT = { x: 130, y: 450 };
 const KIND_OF_PREFIX = { H: "HOUSE", R: "RES", L: "LED", T: "TRANS", C: "CAP", B: "BAT", S: "SOLAR", X: "XFMR" };
 const PREFIX_OF_KIND = { HOUSE: "H", RES: "R", LED: "L", TRANS: "T", CAP: "C", BAT: "B", SOLAR: "S", XFMR: "X" };

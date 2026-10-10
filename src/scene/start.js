@@ -28,7 +28,7 @@ function installStart(city) {
   city.updateChip();
   status.setText(profile.ordersDone > 0
     ? "Welcome back! Tap TODAY to see what to do next — or LEVELS ★ for puzzles."
-    : "Welcome to ECE City! Tap LEVELS ★ to play your first puzzle — more buttons appear as you go.");
+    : "Welcome to ECE City! Your town is empty: tap + BUILD to place a house, then WIRE it up. Or tap LEVELS ★ for puzzles.");
   // After the title screen: "how to play" the very first time, then the
   // daily gift if it's waiting.
   const maybeGift = () => { if (profile.daily.giftDay !== dayKey(new Date())) city.openGiftScreen(); };

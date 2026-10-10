@@ -43,7 +43,9 @@ export async function open(opts = {}) {
         const ALL = ['wire','levels','hint','undo','today','phone','delete','build','settings','howto','title','shop','orders','clothes','clear','count','notebook','records','daily','map','stickers','skip','lines','maker','playcode'];
         // Levels 1-6 done unlocks every toolbar button and the starter phone apps (tests that
         // are about unlocking seed their own campaign).
-        const base = { campaign: { 'sparkville-1': 1, 'sparkville-2': 1, 'sparkville-3': 1, 'sparkville-4': 1, 'sparkville-5': 1, 'sparkville-6': 1 }, seenFeatures: ALL, announced: ALL, coins: 99999, xp: 5000, seenIntro: true, settings: { sparky: false }, daily: { giftDay: today, lastLoginDay: today, loginStreak: 1 }, orders: [null, null, null], refillAt: [9e15, 9e15, 9e15] };
+        const base = { campaign: { 'sparkville-1': 1, 'sparkville-2': 1, 'sparkville-3': 1, 'sparkville-4': 1, 'sparkville-5': 1, 'sparkville-6': 1 }, seenFeatures: ALL, announced: ALL, coins: 99999, xp: 5000, seenIntro: true, settings: { sparky: false }, daily: { giftDay: today, lastLoginDay: today, loginStreak: 1 }, orders: [null, null, null], refillAt: [9e15, 9e15, 9e15],
+          // A new town is empty; most tests start from three houses (the old starter town).
+          towns: { sparkville: { counters: { H: 3 }, parts: [{ kind: 'HOUSE', id: 'H0', x: 430, y: 260 }, { kind: 'HOUSE', id: 'H1', x: 650, y: 260 }, { kind: 'HOUSE', id: 'H2', x: 650, y: 440 }], wires: [{ a: 'GEN', b: 'H0' }, { a: 'H0b', b: 'GND' }] } } };
         localStorage.setItem('ececity.save.v1', JSON.stringify({ ...base, ...seed, settings: { ...base.settings, ...(seed.settings || {}) }, daily: { ...base.daily, ...(seed.daily || {}) } }));
       } catch (e) {}
     }, seed);

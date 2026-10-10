@@ -30,17 +30,10 @@ const finish = (p, ...ids) => { for (const id of ids) p.campaign[id] = 3; };
 const xpFor = (lvl) => XP_FOR_LEVEL[lvl - 1];
 
 console.log("Buttons appear as you go");
-test("a brand-new player sees only WIRE, LEVELS and HINT", () => {
+test("a brand-new player has every toolbar button", () => {
   const t = toolbarFor(fresh());
-  eq(Object.keys(t).filter(k => t[k]).sort(), ["hint", "levels", "wire"]);
-});
-test("finishing levels brings UNDO, then TODAY and the PHONE, then DELETE and + BUILD", () => {
-  const p = fresh();
-  finish(p, "sparkville-1"); assert(toolbarFor(p).undo && toolbarFor(p).redo, "undo after level 1"); assert(!toolbarFor(p).phone, "no phone yet");
-  finish(p, "sparkville-2"); assert(toolbarFor(p).today && toolbarFor(p).phone, "today + phone after level 2");
-  assert(!toolbarFor(p).delete && !toolbarFor(p).build, "not yet");
-  finish(p, "sparkville-4"); assert(toolbarFor(p).delete, "delete after level 4");
-  finish(p, "sparkville-6"); assert(toolbarFor(p).build, "build after level 6");
+  assert(Object.values(t).every(Boolean), JSON.stringify(t));
+  eq(Object.keys(t).sort(), ["build", "delete", "hint", "levels", "phone", "redo", "today", "undo", "wire"]);
 });
 test("or by reaching a level (orders and the daily puzzle also give XP)", () => {
   const p = fresh(); p.xp = xpFor(3);

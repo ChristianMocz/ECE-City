@@ -9,7 +9,7 @@
 function installEvents(city) {
   const { UI_HEIGHT, onEvent, profile, save, scene, setToolLabel, state, status, windowListeners } = city;
   // --- Generator and ground ---
-  const genObj = makeGenerator(scene, 130, 260);
+  const genObj = makeGenerator(scene, 130, 190);
   const genNode = city.addNode({ id: "GEN", type: "GEN", container: genObj.container, hit: genObj.outHit, visual: genObj.visual, data: {} });
   city.registerNodeClicks(genNode);
 

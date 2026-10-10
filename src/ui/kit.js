@@ -6,7 +6,7 @@
 // it, like "build:HOUSE" or "shop:building:bakery".
 //
 // Main pieces: openScreen(), screenButton(), screenText(), fitImage(),
-// coinLine(), tileGrid(), scrollGrid().
+// coinLine(), tileGrid(), scrollGrid(), scrollPane().
 // Uses: src/ui/hud.js (pixelButton, closeLayer). Used by: the other src/ui/ screens.
 
 const SCREEN_DEPTH = 500;
@@ -142,4 +142,48 @@ function scrollGrid(scene, s, items, { cols, tileW, tileH, top, height, gap = 10
   }
   update();
   return { pane, maxScroll, scrollBy, scrollTo: (tag) => { const o = pane.list.find(x => x.tag === tag); if (o && pane.__scrollInto) pane.__scrollInto(o); } };
+}
+
+// A box of free content (text, pictures) that scrolls when it's too tall:
+// mouse wheel, drag the content, ▲ / ▼, or drag the handle. `fill(pane)`
+// adds things to `pane` (y starts at `top`) and returns the content height.
+function scrollPane(scene, s, { left, top, width, height, fill }) {
+  const pane = scene.add.container(0, 0);
+  s.layer.add(pane);
+  const full = fill(pane);
+  const maxScroll = Math.max(0, full - height);
+  const mask = scene.make.graphics({ add: false });
+  mask.fillStyle(0xffffff).fillRect(left - 4, top - 4, width + 8, height + 8);
+  pane.setMask(mask.createGeometryMask());
+  let off = 0, thumb = null, thumbH = 0;
+  const bx = left + width + 18;
+  const update = () => {
+    pane.y = -off;
+    if (thumb) thumb.y = top + 32 + (height - 64 - thumbH) * (maxScroll ? off / maxScroll : 0) + thumbH / 2;
+  };
+  const scrollBy = (d) => { off = Math.max(0, Math.min(maxScroll, off + d)); update(); };
+  if (maxScroll > 0) {
+    const up = screenButton(scene, s.layer, bx, top + 14, 30, 28, "▲", { fill: PALN["B"], fontSize: 13 }, () => scrollBy(-120));
+    const down = screenButton(scene, s.layer, bx, top + height - 14, 30, 28, "▼", { fill: PALN["B"], fontSize: 13 }, () => scrollBy(120));
+    up.hit.tag = "scroll:up"; down.hit.tag = "scroll:down";
+    s.layer.add(scene.add.rectangle(bx, top + height / 2, 10, height - 64, PALN["D"]).setStrokeStyle(2, UI_INK));
+    thumbH = Math.max(30, (height - 64) * height / full);
+    thumb = scene.add.rectangle(bx, top + 18, 16, thumbH, PALN["4"]).setStrokeStyle(2, UI_INK).setInteractive({ useHandCursor: true, draggable: true });
+    thumb.tag = "scroll:thumb";
+    s.layer.add(thumb);
+    thumb.on("pointerdown", (p, lx, ly, e) => e.stopPropagation());
+    thumb.on("drag", (p, dx, dy) => { const t = Math.max(0, Math.min(1, (dy - top - 32 - thumbH / 2) / Math.max(1, height - 64 - thumbH))); off = t * maxScroll; update(); });
+    // Drag the content itself (phones and tablets).
+    const grab = scene.add.rectangle(left + width / 2, top + height / 2, width, height, 0xffffff, 0.001).setInteractive();
+    s.layer.add(grab);
+    let lastY = null;
+    grab.on("pointerdown", (p, lx, ly, e) => { e.stopPropagation(); lastY = p.y; });
+    const move = (p) => { if (lastY === null || !p.isDown) { lastY = null; return; } scrollBy(lastY - p.y); lastY = p.y; };
+    const wheel = (p, over, dx, dy) => { if (s.isOpen?.() !== false && p.x > left - 10 && p.x < bx + 20 && p.y > top && p.y < top + height) scrollBy(dy > 0 ? 50 : -50); };
+    scene.input.on("pointermove", move);
+    scene.input.on("wheel", wheel);
+    pane.once("destroy", () => { scene.input.off("pointermove", move); scene.input.off("wheel", wheel); });
+  }
+  update();
+  return { pane, maxScroll, scrollBy };
 }

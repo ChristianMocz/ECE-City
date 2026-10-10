@@ -68,8 +68,8 @@ Browser tests: `ROOT`, `PAGE`, `CHROME`, `NO_CDN` env vars (see
 - Contexts (`state.context`): `town`, `level`, `boss`, `mission`, `daily`,
   `make`. `enterContext` (`src/scene/contexts.js`) saves the town, clears
   undo and swaps the board; the town economy pauses meanwhile.
-- Unlocks: `FEATURES` in `src/rules/progress.js` (toolbar buttons and phone
-  apps). `todayItems` builds the Today board; town orders live only there.
+- Unlocks: `FEATURES` in `src/rules/progress.js`. Toolbar buttons are always
+  on; phone apps unlock by level. `todayItems` builds the Today board; town orders live only there.
 - Sparky (`maybeAsk`, `src/scene/sparky.js`): solves a copy both ways before
   a wire or switch change and asks only if something visibly changes. At
   most every 15 s; setting "Sparky's guessing game".
@@ -80,6 +80,9 @@ Browser tests: `ROOT`, `PAGE`, `CHROME`, `NO_CDN` env vars (see
   `src/rules/levels.js` (data). Each level has a solution the tests replay.
 - Emergencies (`src/rules/emergencies.js`) and daily puzzles
   (`src/rules/daily.js`) are replayed by tests the same way.
+- New towns start empty (`REGION_STARTERS.sparkville`); browser tests seed
+  the old three-house town in `tests/browser/harness.mjs`.
+- Music: `Music.shuffle(world)` in game, `Music.play("title")` on the title.
 - Puzzle maker: `src/rules/maker.js` (share codes), `src/scene/makerplay.js`.
 
 See `CHANGES.md` for the history and `docs/` for the original research.

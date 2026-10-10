@@ -97,9 +97,10 @@ test("Solar Desert weather: clouds turn to sun, storms to heat", () => {
   eq(regionWeather({ key: "storm", ...WEATHER.storm }, "solardesert").key, "heat");
   eq(regionWeather({ key: "storm", ...WEATHER.storm }, "batterybay").key, "storm");
 });
-test("each region's starter town is a valid board with a lit house", () => {
-  for (const k of REGION_KEYS) {
-    const b = REGION_STARTERS[k] || STARTER_TOWN;
+test("Sparkville starts empty; every other region's starter town has a lit house", () => {
+  eq([REGION_STARTERS.sparkville.parts.length, REGION_STARTERS.sparkville.wires.length], [0, 0]);
+  for (const k of REGION_KEYS.filter(k => k !== "sparkville")) {
+    const b = REGION_STARTERS[k];
     const s = solve(boardState(b));
     eq(s.powered.get("H0").level, "ON", k);
   }

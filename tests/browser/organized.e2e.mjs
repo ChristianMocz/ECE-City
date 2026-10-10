@@ -1,7 +1,7 @@
 // tests/browser/organized.e2e.mjs
 //
-// The "organised" update through the real game screen: buttons that unlock
-// as you go, the phone, Today, the Notebook, Records, time trials and the
+// The "organised" update through the real game screen: a new player's
+// buttons, guide and empty town, the phone, Today, the Notebook, Records, time trials and the
 // no-undo challenge, Expert levels, the Puzzle maker, the clothes scroll,
 // powered decorations and new buildings, the Captain's directions, and the
 // LED advice.
@@ -25,40 +25,49 @@ const solveLevel = async (h, id) => {
   }
 };
 
-console.log('Buttons appear as you go');
+console.log('A new player');
 {
-  const h = await open({ seed: { xp: 0, coins: 50, campaign: {}, seenIntro: true, settings: { sparky: false } } });
-  await h.api(a => { a.setNextEmergencyIn(9e9); a.profile.seenFeatures = ['wire', 'levels', 'hint', 'settings', 'howto', 'title']; a.profile.announced = [...a.profile.seenFeatures]; a.refreshBadges(); });
-  await t('a new player sees only WIRE, LEVELS and HINT', async () => {
+  const h = await open({ seed: { xp: 0, coins: 50, campaign: {}, seenIntro: false, settings: { sparky: false }, towns: {} } });
+  await t('the guide opens first, explains every button and phone app, and scrolls', async () => {
+    await h.waitTag('intro:go');
+    const tx = (await texts(h)).join(' ');
+    for (const w of ['WIRE', '+ BUILD', 'DELETE', 'UNDO', 'REDO', 'LEVELS ★', 'TODAY', 'PHONE', '? HINT', 'Shop', 'World map', 'Notebook', 'Puzzle maker', 'Save & title']) ok(tx.includes(w), w);
+    ok(await h.tagPos('scroll:down'), 'scrolls');
+    await h.tap('scroll:down');
+    await h.tap('intro:go');
+    ok(await h.api(a => a.profile.seenIntro), 'seen');
+  });
+  await h.api(a => { a.setNextEmergencyIn(9e9); });
+  await t('every toolbar button is there from the start', async () => {
     const v = await tb(h);
-    eq(Object.keys(v).filter(k => v[k]).sort(), ['hint', 'levels', 'wire'], 'buttons');
-    ok(!(await h.tagPos('btn:phone')) || !(await h.S(sc => sc.children.list.some(o => o.tag === 'btn:phone' && o.input.enabled))), 'phone not tappable');
+    ok(Object.values(v).every(Boolean), JSON.stringify(v));
+    ok(await h.S(sc => sc.children.list.some(o => o.tag === 'btn:phone' && o.input.enabled)), 'phone tappable');
+  });
+  await t('the town starts empty: just GEN and GND', async () => {
+    eq(await h.S((sc, st) => [...st.nodes.keys()].sort()), ['GEN', 'GND'], 'nodes');
+  });
+  await t('the GEN sits above the road', async () => {
+    const [x, y] = await h.dot('GEN');
+    ok(y < 294, 'dot at ' + y);
+    ok(await h.S((sc, st) => st.nodes.get('GEN').visual.supplyLabel.getBounds().bottom < 294), 'label above the road');
+  });
+  await t('build a house with + BUILD and wire it up', async () => {
+    await h.btn('BUILD'); await h.tap('build:HOUSE'); await h.click(430, 260);
+    eq(await h.S((sc, st) => [...st.nodes.values()].filter(n => n.type === 'HOUSE').length), 1, 'one house');
+    await h.btn('WIRE'); await h.wireIt('GEN', 'H0'); await h.wireIt('H0b', 'GND');
+    eq(await lv(h, 'H0'), 'ON', 'lit');
   });
   await t('tapping the engineer before CLOTHES unlock just says when', async () => {
     await h.btn('ENGINEER'); ok(!(await screenOpen(h)), 'no wardrobe'); ok((await h.status()).includes('level 2'), await h.status());
   });
-  await t('finishing level 1 brings UNDO and REDO (with a New! tag) and says so', async () => {
+  await t('after level 2 the phone has the starter apps', async () => {
     await h.api(a => a.startLevel(CAMPAIGN_BY_ID['sparkville-1']));
-    await h.btn('WIRE'); await solveLevel(h, 'sparkville-1');
+    await solveLevel(h, 'sparkville-1');
     await h.waitTag('result:map'); await h.tap('result:map'); await closeAll(h);
-    await h.api(a => a.backToTown());
-    await h.page.waitForTimeout(700);
-    const v = await tb(h);
-    ok(v.undo && v.redo, 'undo + redo');
-    ok(await h.S(sc => sc.children.list.some(o => o.texture?.key === 'ico_new' && o.visible)), 'New! tag');
-    ok((await h.status()).startsWith('New') && (await h.status()).includes('UNDO'), await h.status());
-  });
-  await t('tapping a New! button clears its tag', async () => {
-    await h.btn('UNDO'); await h.page.waitForTimeout(100);
-    ok(await h.api(a => a.profile.seenFeatures.includes('undo')), 'seen');
-  });
-  await t('level 2 brings TODAY and the PHONE; the phone has the starter apps', async () => {
     await h.api(a => a.startLevel(CAMPAIGN_BY_ID['sparkville-2']));
     await solveLevel(h, 'sparkville-2');
     await h.waitTag('result:map'); await h.tap('result:map'); await closeAll(h); await h.api(a => a.backToTown());
     await h.page.waitForTimeout(300);
-    const v = await tb(h);
-    ok(v.today && v.phone, JSON.stringify(v));
     await h.btn('PHONE');
     for (const k of ['shop', 'clear', 'count']) ok(await h.tagPos('app:' + k), k);
     ok(!(await h.tagPos('app:orders')), 'orders are not in the phone');
@@ -66,13 +75,6 @@ console.log('Buttons appear as you go');
     await h.tap('phonetab:settings');
     for (const k of ['settings', 'howto', 'title']) ok(await h.tagPos('app:' + k), k);
     await closeAll(h);
-  });
-  await t('a level that needs DELETE shows it even before it unlocks', async () => {
-    await h.api(a => a.startLevel(CAMPAIGN_BY_ID['sparkville-5']));
-    await h.page.waitForTimeout(150);
-    ok((await tb(h)).delete, 'delete for level 5');
-    await h.api(a => a.backToTown()); await h.page.waitForTimeout(150);
-    ok(!(await tb(h)).delete, 'gone again in town');
   });
   await t('no errors (new player)', async () => eq(h.errors, [], 'errors'));
   await h.browser.close();
