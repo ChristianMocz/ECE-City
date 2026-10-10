@@ -7,9 +7,12 @@ resistor, capacitors charge, and transformers step voltage up and down.
 
 Built with [Phaser 3](https://phaser.io). Plain JavaScript, no build step.
 
-## Play it
+## ▶ [Play it in your browser](https://christianmocz.github.io/ECE-City/)
 
-Double-click `index.html`. That's it: no server, no install, works offline.
+Free, nothing to install. Works on a computer, phone or tablet.
+
+To run it from a copy of this repo, double-click `index.html`: no server, no
+install, works offline.
 
 Or serve the folder (handy while editing): `python3 tests/devserver.py 8502`,
 then open http://localhost:8502.
