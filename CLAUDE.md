@@ -1,37 +1,85 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code when working in this repository. Start with
+`README.md` for the overview, folder map and how the `city` modules work.
 
-## What this is
+## Basics
 
-ECE City — a browser game (built on Phaser 3) that teaches early electrical engineering concepts (voltage, current, resistance, capacitors, transformers, transistors) by letting the player wire up a small power grid and watch it behave. See `AUDIT.md` and `DESIGN.md` for the research behind the current design, and `CHANGES.md` for what changed in the last major rewrite and what's still deliberately unfinished.
+- Plain JavaScript, classic `<script>` tags, **no ES modules and no build
+  step**. Browsers block modules on `file://`, and double-clicking
+  `index.html` must work. Each file adds globals; load order is in
+  `index.html` and `ece-city-play.html` (keep both in sync).
+- Phaser 3.90.0 is bundled at `lib/phaser.min.js`; `index.html` falls back to
+  the CDN. All art and sound are generated in code.
+- Every file starts with a header: path, a short paragraph, "Main pieces:",
+  "Used by:". Keep comments short and direct.
 
-## Running it
-
-There is no build step, no package manager, and no test suite framework — this is plain JavaScript loaded directly by `index.html` as classic `<script>` tags (**not** ES modules — see below). Phaser itself is pulled from a pinned CDN `<script>` tag in `index.html`, not installed locally.
-
-**Just open `index.html` directly** (double-click it, or `file://` it in a browser) — it works with no server. This is deliberate: `src/state.js`, `src/ui.js`, `src/sim.js`, `src/factory.js`, and `main.js` are loaded as plain classic scripts, each defining top-level functions/consts that the next file in the list depends on (see the load order in `index.html`). ES modules were tried first and reverted — browsers block `type="module"` scripts outright when a page is opened via `file://`, with no server-side workaround, and "clone it and open the file" needs to just work.
-
-Serving it over HTTP also works and is occasionally more convenient for iterating (e.g. `tests/devserver.py <port>` — a tiny stdlib-only static server with caching disabled, since Python's built-in `http.server` has only 1-second mtime resolution and can serve a stale `304` mid-edit). `.claude/launch.json` wires this up for local preview tooling.
-
-There are no lint commands configured in this repo. There is a test suite for the solver:
+## Tests
 
 ```bash
-node tests/sim.test.mjs
+node tests/run-all.mjs            # all unit tests (rules + physics)
+node tests/sim.test.mjs           # one file
+node tests/browser/run-all.mjs    # browser suites (Playwright, slow)
+node tests/browser/game.e2e.mjs   # one browser suite
 ```
 
-(plain ESM, no framework — the solver script `src/sim.js` is loaded as a classic script for the actual game but `tests/sim.test.mjs` itself is a real ES module, so it needs Node or a browser to run). If Node isn't available, open `tests/run-in-browser.html` instead — it loads `src/sim.js` as a classic script, then dynamically imports the test module, and prints pass/fail to both the page and the console.
+Browser tests: `ROOT`, `PAGE`, `CHROME`, `NO_CDN` env vars (see
+`tests/browser/harness.mjs`). Buttons and tiles carry a `.tag`
+(`"build:RES"`, `"today:orders"`...) so tests can tap them.
+`scene.__api` (built in `src/scene/start.js`) exposes game actions for tests.
 
-## Architecture
+## Layers
 
-The app is a single Phaser scene (`main.js`) with one `create()`/`update()` pair, wired to four plain-JS files under `src/` (loaded in this order — it matters, since none of them are modules): `ui.js`, `state.js`, `sim.js`, `factory.js`.
+- `src/circuit/` and `src/rules/`: pure logic, no Phaser. Unit tested.
+- `src/ui/`: screens. Drawing only; taps go back through callbacks.
+- `src/scene/`: the game. Each file is `installX(city)`; `main.js` calls them
+  in order. Shared functions go on `city` via `Object.assign`; shared mutable
+  values are `city.x` (e.g. `city.townDirty`). A module may only use another
+  module's function at install time if that module installed earlier.
 
-- **`src/state.js`** — `createGameState()` returns the single mutable state object for the whole game: the node/wire graph, tool mode, undo/redo stacks, all electrical constants (generator internal resistance, LED diode model, resistor/capacitor/transformer presets, on/dim/off thresholds — each documented in place with the reasoning behind its value), and display toggles. There is no other state store — everything reads/writes this one object.
-- **`src/sim.js`** — the circuit solver, and the most important file in the repo to understand before changing anything electrical. `computePower(state, dt)` is the only entry point and does a full recompute each call (no incremental updates). The core model: **every real component is two-terminal** — a "hot" lead and a "b"/return lead, both genuine, independently-wireable graph nodes (see the header comment in `sim.js` for the full reasoning). This is what makes a closed loop back to GND a *structural requirement* for current to flow, rather than a special-cased gate: with GND as a real, separately-reachable fixed-voltage node, a dangling lead just has nowhere for current to go, and standard nodal analysis handles it correctly with no extra code. GEN is modeled as a Thevenin source (ideal EMF folded into its own KCL row via an internal resistance) so it honestly sags under load. The transformer is the one component that needs a genuine extra unknown — an ideal-transformer MNA stamp (auxiliary branch-current variable) so its secondary is derived from its own solved primary voltage and power conservation falls out of the linear system itself. LEDs are modeled as diodes (forward-voltage drop + small internal resistance), not resistors. Capacitors use a Backward-Euler companion model for the charging transient. The whole thing is solved via Gaussian elimination (`solveLinear`), which throws on a singular/ill-conditioned matrix (caught into `state.solverError`) instead of silently returning zeros.
-- **`src/factory.js`** — pure Phaser scene-graph builders. Each `make*` function (`makeGenerator`, `makeGroundTerminal`, `makeHouse`, `makeResistor`, `makeCapacitor`, `makeTransformer`, `makeTransistor`, `makeLED`) draws a device and returns its container plus one or two terminal-dot hit objects (`inHit`/`outHit`, or `priHit`/`secHit` for the transformer) matching the two-terminal model in `sim.js`. `set*Visual` functions recolor an existing device based on simulated state, and `playBurnoutEffect` is the LED-pop animation. No simulation logic lives here.
-- **`src/ui.js`** — the HUD (title, tool label, toggles, button grid) plus a small reusable in-canvas overlay system (`showChoiceOverlay`, `showConfirmOverlay`) that replaces `window.prompt()`/`window.confirm()` entirely — native dialogs are blocked in some embeds and unfriendly on mobile. Buttons emit scene events (`tool-switch`, `undo-requested`, `clear-all-requested`, etc.) rather than mutating `state.mode` directly, so `main.js` has one place (the `tool-switch` handler) to guarantee a dangling wire preview always gets cleared on any tool change.
-- **`main.js`** — the Phaser scene glue. Owns node placement (`placePart` is a single dispatcher for every two-terminal component kind; `placeXfmr` is separate since its two nodes aren't a simple id/id+"b" pair), the click-to-wire interaction, delete (component or nearest wire, via point-to-segment distance), snapshot-based undo/redo (`serializeBuild`/`rebuildFrom` — tear down and rebuild from a plain-data snapshot rather than diffing), and `refreshPower()`, which calls `computePower` (gated behind a dirty flag or an active capacitor — the expensive solve doesn't run every frame if nothing changed) and pushes results into device visuals, wire coloring, and the current-dot animation (which itself runs every frame off the *last* solved currents, decoupled from the solve).
+## Circuit model (read before changing physics)
 
-**Key invariant:** every node lives in `state.nodes` (id → `{ id, type, container, hit, visual, data }`), where `hit` is the specific terminal-dot game object for that node (not the whole component). Every connection lives in `state.wires` (`{ a, b, line, labelText, phase }`) as an undirected pair of node ids. Two-terminal components tag both their nodes with `data.pairId` pointing at the other terminal, and the hot/primary node additionally carries `data.kind` and `data.role` ("primary"/"secondary") used by undo/redo serialization. `sim.js` never touches Phaser objects directly — it only reads `node.type`/`node.data` and `state.wires`, then writes derived numbers back into `state.*` maps. All rendering/visual updates happen in `main.js`/`factory.js` in response to those derived numbers, not inside `sim.js`.
+- `src/circuit/solver.js`: `computePower(state, dt)` does a full nodal
+  analysis each call. Every part has a hot dot (`id`) and a return dot
+  (`id + "b"`), linked by `data.pairId`. A closed loop to GND is needed for
+  current, with no special cases. GEN is a Thevenin source; LEDs are diodes;
+  capacitors and batteries use Backward Euler; the transformer has its own
+  branch-current unknown. `solveLinear` throws on a singular matrix (caught
+  into `state.solverError`).
+- `state.nodes`: id → `{ id, type, container, hit, visual, data }`.
+  `state.wires`: `{ a, b, line, ... }`. The solver only reads `type`/`data`
+  and writes results to `state.*` maps; drawing happens in `src/scene/`.
+- New part: sprite (`src/art/pixelart.js`), `make*`/`set*Visual`
+  (`src/scene/parts.js`, extents in `PART_EXTENT` in
+  `src/scene/constants.js`), `placePart` (`src/scene/board.js`),
+  `branchParams` (`src/circuit/solver.js`), and a test.
+- Buildings are houses with `data.building` and their own `R`/`vOn`/`vDim`.
+  Loads scale by `state.loadScale`; solar by `state.solarFactor`; the
+  generator by `state.genScale`. A generator never takes current backwards.
+- Popped LEDs (`data.burned`) are refitted by `refitPoppedLEDs`
+  (`src/scene/editing.js`). Never make a state the player can't undo.
 
-Node types: `GEN`, `GND`, `RES`/`RES_B`, `TRANS`/`TRANS_B`, `HOUSE`/`HOUSE_B`, `LED`/`LED_B`, `CAP`/`CAP_B`, `XFMR_PRI`/`XFMR_SEC`. Adding a new two-terminal device type touches: a `make*`/`set*Visual` pair in `factory.js`, a case in `placePart`'s dispatch in `main.js` (or its own `placeX` function if it doesn't fit the hot/`+"b"` pattern), and a case in `sim.js`'s `branchParams` (the conductance + optional bias-current for its internal branch).
+## Game rules worth knowing
+
+- Save ("profile"): `src/rules/game.js`, always through `normalizeProfile`.
+  Slot 1 is `localStorage` key `ececity.save.v1`, slots 2-3 add `.slotN`.
+  Switching slot restarts the scene, so scene listeners go through `onEvent`
+  (`src/scene/setup.js`), which removes them on shutdown.
+- Contexts (`state.context`): `town`, `level`, `boss`, `mission`, `daily`,
+  `make`. `enterContext` (`src/scene/contexts.js`) saves the town, clears
+  undo and swaps the board; the town economy pauses meanwhile.
+- Unlocks: `FEATURES` in `src/rules/progress.js` (toolbar buttons and phone
+  apps). `todayItems` builds the Today board; town orders live only there.
+- Sparky (`maybeAsk`, `src/scene/sparky.js`): solves a copy both ways before
+  a wire or switch change and asks only if something visibly changes. At
+  most every 15 s; setting "Sparky's guessing game".
+- Captain Short Circuit (`src/rules/world.js` `BOSSES`, `src/scene/boss.js`):
+  a solved board plus reversible `breaks`. The blackout is visual only
+  (`visualNight`).
+- Levels: `src/rules/campaign.js` (engine, `L()` shorthand) and
+  `src/rules/levels.js` (data). Each level has a solution the tests replay.
+- Emergencies (`src/rules/emergencies.js`) and daily puzzles
+  (`src/rules/daily.js`) are replayed by tests the same way.
+- Puzzle maker: `src/rules/maker.js` (share codes), `src/scene/makerplay.js`.
+
+See `CHANGES.md` for the history and `docs/` for the original research.

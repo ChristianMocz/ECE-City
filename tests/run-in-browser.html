@@ -1,15 +1,51 @@
 <!doctype html>
 <html>
-  <head><meta charset="utf-8" /><title>sim.js tests</title></head>
-  <body>
-    <pre id="out">running...</pre>
-    <script src="../src/sim.js"></script>
-    <script type="module">
+  <head><meta charset="utf-8" /><title>ECE City tests</title></head>
+  <body style="font: 14px/1.4 monospace; padding: 12px;">
+    <h2 id="total" style="font-family: Arial, sans-serif;">Running…</h2>
+    <pre id="out"></pre>
+    <!-- Double-click this file to run every test without Node or a server.
+         All scripts are classic (not modules): browsers block modules on file://. -->
+    <script>
+      window.__LOG__ = [];
       const origLog = console.log;
-      const lines = [];
-      console.log = (...args) => { lines.push(args.join(" ")); origLog(...args); };
-      await import("./sim.test.mjs");
-      document.getElementById("out").textContent = lines.join("\n");
+      console.log = (...args) => { window.__LOG__.push(args.join(" ")); origLog(...args); };
+    </script>
+    <script src="../src/art/pixelart.js"></script>
+    <script src="../src/audio/music.js"></script>
+    <script src="../src/rules/game.js"></script>
+    <script src="../src/rules/world.js"></script>
+    <script src="../src/rules/plants.js"></script>
+    <script src="../src/rules/daily.js"></script>
+    <script>var Mode = { WIRE: "WIRE" }; // circuit/state.js needs Mode; ui/hud.js needs Phaser, so define just this</script>
+    <script src="../src/circuit/state.js"></script>
+    <script src="../src/circuit/solver.js"></script>
+    <script src="../src/circuit/diagnose.js"></script>
+    <script src="../src/rules/campaign.js"></script>
+    <script src="../src/rules/levels.js"></script>
+    <script src="../src/rules/emergencies.js"></script>
+    <script src="../src/rules/progress.js"></script>
+    <script src="../src/rules/maker.js"></script>
+    <script src="../src/rules/missions.js"></script>
+    <script src="./sim.test.mjs"></script>
+    <script src="./features.test.mjs"></script>
+    <script src="./game.test.mjs"></script>
+    <script src="./world.test.mjs"></script>
+    <script src="./plants.test.mjs"></script>
+    <script src="./campaign.test.mjs"></script>
+    <script src="./emergencies.test.mjs"></script>
+    <script src="./progress.test.mjs"></script>
+    <script>
+      const suites = window.__TEST_SUITES__ || [];
+      const pass = suites.reduce((n, s) => n + s.pass, 0);
+      const fail = suites.reduce((n, s) => n + s.fail, 0);
+      window.__TEST_RESULTS__ = { pass, fail, suites: suites.length, failures: suites.flatMap(s => s.failures) };
+      const total = document.getElementById("total");
+      total.textContent = suites.length < 8
+        ? "Some test files didn't load — check the browser console."
+        : `${pass} passed, ${fail} failed`;
+      total.style.color = fail || suites.length < 8 ? "#b02a2a" : "#1d7a2e";
+      document.getElementById("out").textContent = window.__LOG__.join("\n");
       window.__DONE__ = true;
     </script>
   </body>

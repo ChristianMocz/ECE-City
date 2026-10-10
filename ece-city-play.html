@@ -1,0 +1,66 @@
+<meta charset="utf-8">
+<title>ECE City</title>
+<style>
+  /* Single-look game page: the game draws its own sky and grass; this is just the frame around the canvas. */
+  :root { --frame: #1a1c2c; color-scheme: dark; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--frame); overflow: hidden; }
+  canvas { display: block; margin: 0 auto; touch-action: none; image-rendering: pixelated; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+<script src="src/art/font.js"></script>
+<script src="src/art/pixelart.js"></script>
+<script src="src/art/gameart.js"></script>
+<script src="src/art/worldart.js"></script>
+<script src="src/art/shopart.js"></script>
+<script src="src/audio/sound.js"></script>
+<script src="src/audio/music.js"></script>
+<script src="src/rules/game.js"></script>
+<script src="src/rules/world.js"></script>
+<script src="src/rules/plants.js"></script>
+<script src="src/rules/daily.js"></script>
+<script src="src/ui/hud.js"></script>
+<script src="src/ui/kit.js"></script>
+<script src="src/ui/shop.js"></script>
+<script src="src/ui/map.js"></script>
+<script src="src/ui/popups.js"></script>
+<script src="src/ui/title.js"></script>
+<script src="src/ui/levelmap.js"></script>
+<script src="src/ui/phone.js"></script>
+<script src="src/ui/makerscreens.js"></script>
+<script src="src/circuit/state.js"></script>
+<script src="src/circuit/solver.js"></script>
+<script src="src/circuit/diagnose.js"></script>
+<script src="src/rules/campaign.js"></script>
+<script src="src/rules/levels.js"></script>
+<script src="src/rules/emergencies.js"></script>
+<script src="src/rules/progress.js"></script>
+<script src="src/rules/maker.js"></script>
+<script src="src/rules/missions.js"></script>
+<script src="src/scene/parts.js"></script>
+<script src="src/scene/life.js"></script>
+<script src="src/scene/constants.js"></script>
+<script src="src/scene/setup.js"></script>
+<script src="src/scene/night.js"></script>
+<script src="src/scene/board.js"></script>
+<script src="src/scene/editing.js"></script>
+<script src="src/scene/sparky.js"></script>
+<script src="src/scene/touch.js"></script>
+<script src="src/scene/power.js"></script>
+<script src="src/scene/rewards.js"></script>
+<script src="src/scene/contexts.js"></script>
+<script src="src/scene/worldmap.js"></script>
+<script src="src/scene/boss.js"></script>
+<script src="src/scene/training.js"></script>
+<script src="src/scene/levelplay.js"></script>
+<script src="src/scene/town.js"></script>
+<script src="src/scene/weather.js"></script>
+<script src="src/scene/toolbar.js"></script>
+<script src="src/scene/decor.js"></script>
+<script src="src/scene/buildmenu.js"></script>
+<script src="src/scene/phone.js"></script>
+<script src="src/scene/makerplay.js"></script>
+<script src="src/scene/menus.js"></script>
+<script src="src/scene/events.js"></script>
+<script src="src/scene/start.js"></script>
+<script src="main.js"></script>

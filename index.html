@@ -5,20 +5,86 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>ECE City</title>
     <style>
-      html, body { margin: 0; padding: 0; background: #0b1020; overflow: hidden; height: 100%; }
-      canvas { display: block; margin: 0 auto; touch-action: none; }
+      html, body { margin: 0; padding: 0; background: #1a1c2c; overflow: hidden; height: 100%; }
+      canvas { display: block; margin: 0 auto; touch-action: none; image-rendering: pixelated; }
+      #load-error { color: #fff; font: 18px/1.5 Arial, sans-serif; max-width: 560px; margin: 80px auto; padding: 0 16px; }
     </style>
   </head>
   <body>
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+    <!-- Phaser 3.90.0 is bundled in lib/ (MIT, see lib/PHASER-LICENSE.md) so
+         the game works with no internet connection — e.g. on a classroom
+         laptop. If that file is missing, fall back to the same pinned
+         version on the CDN. -->
+    <script src="./lib/phaser.min.js"></script>
+    <script>
+      if (!window.Phaser) {
+        document.write('<script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"><\/script>');
+      }
+    </script>
+    <script>
+      if (!window.Phaser) {
+        document.write('<div id="load-error"><b>ECE City couldn\'t start.</b><br>The game engine file <code>lib/phaser.min.js</code> is missing and the internet copy couldn\'t be reached. Put the file back, or connect to the internet and reload.</div>');
+      }
+    </script>
     <!-- Plain classic scripts, not ES modules: modules are blocked entirely
          by browsers when this file is opened via file:// (double-clicked),
          with no server-side workaround. Order matters — each file defines
          top-level globals the next one depends on. -->
-    <script src="./src/ui.js"></script>
-    <script src="./src/state.js"></script>
-    <script src="./src/sim.js"></script>
-    <script src="./src/factory.js"></script>
+    <script src="./src/art/font.js"></script>
+    <script src="./src/art/pixelart.js"></script>
+    <script src="./src/art/gameart.js"></script>
+    <script src="./src/art/worldart.js"></script>
+    <script src="./src/art/shopart.js"></script>
+    <script src="./src/audio/sound.js"></script>
+    <script src="./src/audio/music.js"></script>
+    <script src="./src/rules/game.js"></script>
+    <script src="./src/rules/world.js"></script>
+    <script src="./src/rules/plants.js"></script>
+    <script src="./src/rules/daily.js"></script>
+    <script src="./src/ui/hud.js"></script>
+    <script src="./src/ui/kit.js"></script>
+    <script src="./src/ui/shop.js"></script>
+    <script src="./src/ui/map.js"></script>
+    <script src="./src/ui/popups.js"></script>
+    <script src="./src/ui/title.js"></script>
+    <script src="./src/ui/levelmap.js"></script>
+    <script src="./src/ui/phone.js"></script>
+    <script src="./src/ui/makerscreens.js"></script>
+    <script src="./src/circuit/state.js"></script>
+    <script src="./src/circuit/solver.js"></script>
+    <script src="./src/circuit/diagnose.js"></script>
+    <script src="./src/rules/campaign.js"></script>
+    <script src="./src/rules/levels.js"></script>
+    <script src="./src/rules/emergencies.js"></script>
+    <script src="./src/rules/progress.js"></script>
+    <script src="./src/rules/maker.js"></script>
+    <script src="./src/rules/missions.js"></script>
+    <script src="./src/scene/parts.js"></script>
+    <script src="./src/scene/life.js"></script>
+    <script src="./src/scene/constants.js"></script>
+    <script src="./src/scene/setup.js"></script>
+    <script src="./src/scene/night.js"></script>
+    <script src="./src/scene/board.js"></script>
+    <script src="./src/scene/editing.js"></script>
+    <script src="./src/scene/sparky.js"></script>
+    <script src="./src/scene/touch.js"></script>
+    <script src="./src/scene/power.js"></script>
+    <script src="./src/scene/rewards.js"></script>
+    <script src="./src/scene/contexts.js"></script>
+    <script src="./src/scene/worldmap.js"></script>
+    <script src="./src/scene/boss.js"></script>
+    <script src="./src/scene/training.js"></script>
+    <script src="./src/scene/levelplay.js"></script>
+    <script src="./src/scene/town.js"></script>
+    <script src="./src/scene/weather.js"></script>
+    <script src="./src/scene/toolbar.js"></script>
+    <script src="./src/scene/decor.js"></script>
+    <script src="./src/scene/buildmenu.js"></script>
+    <script src="./src/scene/phone.js"></script>
+    <script src="./src/scene/makerplay.js"></script>
+    <script src="./src/scene/menus.js"></script>
+    <script src="./src/scene/events.js"></script>
+    <script src="./src/scene/start.js"></script>
     <script src="./main.js"></script>
   </body>
 </html>

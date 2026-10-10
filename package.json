@@ -1,0 +1,15 @@
+{
+  "name": "ece-city",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A pixel-art browser game that teaches early electrical engineering.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node tests/run-all.mjs",
+    "test:browser": "node tests/browser/run-all.mjs",
+    "serve": "python3 tests/devserver.py 8502"
+  },
+  "devDependencies": {
+    "playwright": "^1.48.0"
+  }
+}
